@@ -1,4 +1,4 @@
-UUID = maclike-dock@angelojulioth.github.com
+UUID = maclike-dock@angelojulioth.github.io
 ZIP = $(UUID).zip
 RUNTIME = metadata.json extension.js dock.js dockItem.js stackFan.js \
 	nativeBlur.js stylesheet.css icons schemas locale LICENSE

@@ -35,11 +35,11 @@ edge triggers and overview behavior.
 
 ## Install from a release
 
-Download `maclike-dock@angelojulioth.github.com.zip`, then run:
+Download `maclike-dock@angelojulioth.github.io.zip`, then run:
 
 ```bash
-gnome-extensions install --force maclike-dock@angelojulioth.github.com.zip
-gnome-extensions enable maclike-dock@angelojulioth.github.com
+gnome-extensions install --force maclike-dock@angelojulioth.github.io.zip
+gnome-extensions enable maclike-dock@angelojulioth.github.io
 ```
 
 Log out and back in after installing or upgrading. GNOME Shell does not fully
@@ -48,7 +48,7 @@ reload extension modules in a Wayland session.
 Open the settings window with:
 
 ```bash
-gnome-extensions prefs maclike-dock@angelojulioth.github.com
+gnome-extensions prefs maclike-dock@angelojulioth.github.io
 ```
 
 ## Build from source
@@ -60,7 +60,7 @@ make
 ```
 
 The extension archive is written to
-`maclike-dock@angelojulioth.github.com.zip`.
+`maclike-dock@angelojulioth.github.io.zip`.
 
 ## Folder previews
 

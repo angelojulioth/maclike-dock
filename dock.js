@@ -951,7 +951,7 @@ export class MaclikeDock {
         this._releaseMagnification();
         const openIcon = new Gio.FileIcon({
             file: Gio.File.new_for_path(GLib.build_filenamev([
-                this._extensionPath, 'icons', 'open-in-finder-tahoe.svg',
+                this._extensionPath, 'icons', 'open-in-files-glass.svg',
             ])),
         });
         this._stack = new StackPopup({
