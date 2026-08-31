@@ -103,8 +103,6 @@ export class MaclikeDock {
         this._lastSignature = null;
         this._visibilityTimeout = 0;
         this._windowWatchId = 0;
-        this._bmsGeometrySyncId = 0;
-        this._bmsGeometryWatchId = 0;
         this._startupRelayoutIds = [];
         this._interfaceSettings = new Gio.Settings({
             schema_id: 'org.gnome.desktop.interface',
@@ -179,12 +177,6 @@ export class MaclikeDock {
             if (!this._dash.hover)
                 this._releaseMagnification();
         });
-        for (const actor of [this._dash, this._dash._background]) {
-            for (const property of ['x', 'y', 'width', 'height']) {
-                this._connect(actor, `notify::${property}`, () =>
-                    this._syncManagedBmsGeometry());
-            }
-        }
         this._connect(Main.layoutManager, 'monitors-changed', () => this._relayout());
         this._connect(this._interfaceSettings, 'changed::color-scheme', () => {
             this._syncColorScheme();
@@ -421,6 +413,7 @@ export class MaclikeDock {
         this._detachNativeBlur();
         if (engine === 'off') {
             this._detachDynamicDockBlur();
+            this._hideManagedBmsDashSurface();
             this._dockBlurStatus = 'disabled';
             return;
         }
@@ -429,6 +422,7 @@ export class MaclikeDock {
         const dashSettings = bms?._settings?.dash_to_dock;
         if (!effectsManager || !dashSettings || !this._dash?._background) {
             this._detachDynamicDockBlur();
+            this._hideManagedBmsDashSurface();
             this._dockBlurStatus = 'blur-my-shell-unavailable';
             return;
         }
@@ -436,14 +430,14 @@ export class MaclikeDock {
         const managedInfo = bms?._dash_to_dock_blur?.dashes
             ?.find(candidate => candidate.dash === this._dash);
         if (managedInfo?.background_group) {
-            this._detachDynamicDockBlur();
             this._bmsDashInfo = managedInfo;
-            managedInfo.background_group.show();
-            this._syncManagedBmsGeometry();
-            this._startBmsGeometryWatcher();
-            this._dockBlurStatus = 'attached-managed-bms-surface';
-            this._applyDockBackgroundStyle(this._getBmsDockRadius());
-            return;
+            // Blur My Shell sizes its Dash-to-Dock surface from the outer
+            // magnification reserve. That allocation is deliberately taller
+            // than the visible glass, so its managed surface cannot be used
+            // without leaking the startup geometry around the Dock. Keep that
+            // actor hidden and attach BMS's own effects to the exact visible
+            // background actor instead.
+            managedInfo.background_group.hide();
         }
 
         const attachedActor = this._dockBlurEffect?.get_actor?.();
@@ -488,7 +482,6 @@ export class MaclikeDock {
     }
 
     _attachNativeBlur() {
-        this._stopBmsGeometryWatcher();
         if (!this._nativeBlurLayer)
             return;
         const params = {
@@ -507,108 +500,6 @@ export class MaclikeDock {
         this._applyDockBackgroundStyle(FALLBACK_BORDER_RADIUS);
     }
 
-    _syncManagedBmsGeometry() {
-        const info = this._bmsDashInfo;
-        if (!info?.background_group || !this._dash?._background)
-            return;
-        const width = this._dash._background.width;
-        const height = this._dash._background.height;
-        if (width <= 0 || height <= 0)
-            return;
-        const group = info.background_group;
-        group.x_expand = false;
-        group.y_expand = false;
-        group.x_align = Clutter.ActorAlign.CENTER;
-        group.y_align = Clutter.ActorAlign.END;
-        group.set_size(width, height);
-        group.clip_to_allocation = true;
-        group.translation_x = 0;
-        group.translation_y = 0;
-        const immediateTargetX = this._dash.x + this._dash._background.x;
-        const immediateTargetY = this._dash.y + this._dash._background.y;
-        if ([immediateTargetX, immediateTargetY, group.x, group.y]
-            .every(Number.isFinite)) {
-            group.translation_x = Math.round(immediateTargetX - group.x);
-            group.translation_y = Math.round(immediateTargetY - group.y);
-        }
-
-        const staticBlur = global.blur_my_shell?._settings?.dash_to_dock
-            ?.STATIC_BLUR;
-        if (!staticBlur) {
-            info.background.set_position(0, 0);
-            info.background.set_size(width, height);
-        }
-        if (this._bmsGeometrySyncId)
-            GLib.source_remove(this._bmsGeometrySyncId);
-        let attempts = 0;
-        const align = () => {
-            this._bmsGeometrySyncId = GLib.timeout_add_once(
-                GLib.PRIORITY_DEFAULT, attempts === 0 ? 0 : 16, () => {
-                this._bmsGeometrySyncId = 0;
-                if (!this._dash?._background || !group.get_parent())
-                    return;
-                const targetX = this._dash.x + this._dash._background.x;
-                const targetY = this._dash.y + this._dash._background.y;
-                const values = [targetX, targetY, group.x, group.y];
-                if (!values.every(Number.isFinite)) {
-                    if (++attempts < 8)
-                        align();
-                    return;
-                }
-                group.translation_x = Math.round(targetX - group.x);
-                group.translation_y = Math.round(targetY - group.y);
-                if (staticBlur) {
-                    const [screenX, screenY] =
-                        this._dash._background.get_transformed_position();
-                    if (Number.isFinite(screenX) && Number.isFinite(screenY))
-                        info.background.set_position(-screenX, -screenY);
-                }
-            });
-            GLib.Source.set_name_by_id(this._bmsGeometrySyncId,
-                '[maclike-dock] align Blur My Shell surface');
-        };
-        align();
-    }
-
-    _startBmsGeometryWatcher() {
-        if (this._bmsGeometryWatchId)
-            return;
-        this._bmsGeometryWatchId = GLib.timeout_add(
-            GLib.PRIORITY_DEFAULT_IDLE, 250, () => {
-                if (this._settings?.get_string('blur-engine') !== 'bms') {
-                    this._bmsGeometryWatchId = 0;
-                    return GLib.SOURCE_REMOVE;
-                }
-                const info = this._bmsDashInfo;
-                const group = info?.background_group;
-                const target = this._dash?._background;
-                if (!group || !target)
-                    return GLib.SOURCE_CONTINUE;
-                const [groupX, groupY] = group.get_transformed_position();
-                const [groupWidth, groupHeight] = group.get_transformed_size();
-                const [targetX, targetY] = target.get_transformed_position();
-                const [targetWidth, targetHeight] = target.get_transformed_size();
-                const outOfSync = [groupX, groupY, groupWidth, groupHeight,
-                    targetX, targetY, targetWidth, targetHeight]
-                    .some(value => !Number.isFinite(value)) ||
-                    Math.abs(groupX - targetX) > 0.5 ||
-                    Math.abs(groupY - targetY) > 0.5 ||
-                    Math.abs(groupWidth - targetWidth) > 0.5 ||
-                    Math.abs(groupHeight - targetHeight) > 0.5;
-                if (outOfSync)
-                    this._syncManagedBmsGeometry();
-                return GLib.SOURCE_CONTINUE;
-            });
-        GLib.Source.set_name_by_id(this._bmsGeometryWatchId,
-            '[maclike-dock] keep Blur My Shell aligned');
-    }
-
-    _stopBmsGeometryWatcher() {
-        if (this._bmsGeometryWatchId)
-            GLib.source_remove(this._bmsGeometryWatchId);
-        this._bmsGeometryWatchId = 0;
-    }
-
     _scheduleStartupRelayouts() {
         for (const delay of [0, 250, 900, 1800]) {
             const id = GLib.timeout_add_once(
@@ -619,7 +510,6 @@ export class MaclikeDock {
                     if (!this._outer)
                         return;
                     this._relayout();
-                    this._syncManagedBmsGeometry();
                 });
             this._startupRelayoutIds.push(id);
             GLib.Source.set_name_by_id(id,
@@ -662,8 +552,8 @@ export class MaclikeDock {
             if (this._settings.get_string('blur-engine') === 'bms') {
                 this._bmsDashInfo = global.blur_my_shell?._dash_to_dock_blur
                     ?.dashes?.find(candidate => candidate.dash === this._dash);
-                this._bmsDashInfo?.background_group?.show();
-                this._syncManagedBmsGeometry();
+                this._bmsDashInfo?.background_group?.hide();
+                this._syncDynamicDockBlur();
             } else {
                 this._hideManagedBmsDashSurface();
                 this._syncDynamicDockBlur();
@@ -704,14 +594,6 @@ export class MaclikeDock {
     }
 
     _detachDynamicDockBlur() {
-        this._stopBmsGeometryWatcher();
-        if (this._bmsDashInfo?.background_group) {
-            try {
-                this._bmsDashInfo.background_group.show();
-            } catch {
-                // The managed surface may already be gone.
-            }
-        }
         this._bmsDashInfo = null;
         if (this._dockCornerEffect) {
             try {
@@ -1322,16 +1204,12 @@ export class MaclikeDock {
             GLib.source_remove(this._windowWatchId);
         if (this._launchPinTimeout)
             GLib.source_remove(this._launchPinTimeout);
-        if (this._bmsGeometrySyncId)
-            GLib.source_remove(this._bmsGeometrySyncId);
-        this._stopBmsGeometryWatcher();
         for (const id of this._startupRelayoutIds)
             GLib.source_remove(id);
         this._startupRelayoutIds = [];
         this._visibilityTimeout = 0;
         this._windowWatchId = 0;
         this._launchPinTimeout = 0;
-        this._bmsGeometrySyncId = 0;
         this._destroyStrut();
         this._disconnectBmsSettings();
         if (this._bmsDashInfo?.remove_dash_blur) {
