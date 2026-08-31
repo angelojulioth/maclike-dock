@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.maclike-dock" path="/org/gnome/shell/extensions/maclike-dock/" gettext-domain="maclike-dock">
+    <key name="icon-size" type="i">
+      <range min="32" max="80"/>
+      <default>58</default>
+      <summary>Base icon size</summary>
+    </key>
+    <key name="magnification" type="d">
+      <range min="1.10" max="2.50"/>
+      <default>1.72</default>
+      <summary>Maximum pointer magnification</summary>
+    </key>
+    <key name="magnification-radius" type="d">
+      <range min="1.00" max="4.00"/>
+      <default>3.25</default>
+      <summary>Magnification influence range</summary>
+    </key>
+    <key name="animation-duration" type="i">
+      <range min="0" max="250"/>
+      <default>105</default>
+      <summary>Animation response in milliseconds</summary>
+    </key>
+    <key name="show-running-apps" type="b">
+      <default>true</default>
+      <summary>Show running applications that are not favorites</summary>
+    </key>
+    <key name="indicator-max-dots" type="i">
+      <range min="1" max="5"/>
+      <default>3</default>
+      <summary>Maximum window indicators per application</summary>
+    </key>
+    <key name="hide-in-overview" type="b">
+      <default>true</default>
+      <summary>Hide the Dock in Activities</summary>
+    </key>
+    <key name="hide-overview-dash" type="b">
+      <default>true</default>
+      <summary>Hide the original GNOME Dash in Activities</summary>
+    </key>
+    <key name="border-enabled" type="b">
+      <default>true</default>
+      <summary>Show the container border</summary>
+    </key>
+    <key name="blur-engine" type="s">
+      <choices><choice value="native"/><choice value="bms"/><choice value="off"/></choices>
+      <default>'native'</default>
+      <summary>Dock blur engine</summary>
+    </key>
+    <key name="blur-sigma" type="i">
+      <range min="5" max="80"/><default>32</default>
+      <summary>Native blur intensity</summary>
+    </key>
+    <key name="blur-brightness" type="d">
+      <range min="0.20" max="1.00"/><default>0.72</default>
+      <summary>Native blur brightness</summary>
+    </key>
+    <key name="visibility-mode" type="s">
+      <choices>
+        <choice value="always"/>
+        <choice value="autohide"/>
+        <choice value="dodge"/>
+      </choices>
+      <default>'always'</default>
+      <summary>Dock visibility behavior</summary>
+    </key>
+    <key name="hide-delay" type="i">
+      <range min="0" max="2000"/>
+      <default>260</default>
+      <summary>Delay before hiding the Dock</summary>
+    </key>
+    <key name="show-delay" type="i">
+      <range min="0" max="1000"/>
+      <default>60</default>
+      <summary>Delay before showing the Dock</summary>
+    </key>
+    <key name="hide-animation-duration" type="i">
+      <range min="80" max="500"/>
+      <default>180</default>
+      <summary>Hide animation duration</summary>
+    </key>
+    <key name="reserve-space-for-maximized" type="b">
+      <default>false</default>
+      <summary>Reserve Dock height for maximized windows</summary>
+    </key>
+    <key name="folder-paths" type="as">
+      <default>['special://downloads']</default>
+      <summary>Folders shown as stacks</summary>
+    </key>
+    <key name="folder-icon-style" type="s">
+      <choices><choice value="folder"/><choice value="stack"/></choices>
+      <default>'folder'</default>
+      <summary>Folder icon presentation</summary>
+    </key>
+    <key name="stack-max-items" type="i">
+      <range min="4" max="20"/>
+      <default>10</default>
+      <summary>Maximum number of items in a stack</summary>
+    </key>
+    <key name="stack-sort" type="s">
+      <choices>
+        <choice value="modified"/>
+        <choice value="name"/>
+      </choices>
+      <default>'modified'</default>
+      <summary>Stack item order</summary>
+    </key>
+    <key name="stack-view" type="s">
+      <choices>
+        <choice value="fan"/>
+        <choice value="grid"/>
+      </choices>
+      <default>'fan'</default>
+      <summary>Folder stack presentation</summary>
+    </key>
+    <key name="grid-columns" type="i">
+      <range min="3" max="6"/>
+      <default>4</default>
+      <summary>Number of grid columns</summary>
+    </key>
+  </schema>
+</schemalist>

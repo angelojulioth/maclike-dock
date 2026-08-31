@@ -1,0 +1,348 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR Angelo Julio
+# This file is distributed under the same license as the Maclike Dock package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: Maclike Dock 21\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-08-31 01:32-0500\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: prefs.js:36
+msgid "Maclike Dock"
+msgstr ""
+
+#: prefs.js:40
+msgid "Dock"
+msgstr ""
+
+#: prefs.js:46
+msgid "Magnification"
+msgstr ""
+
+#: prefs.js:47
+msgid ""
+"Scale falls off smoothly with the distance between each icon and the pointer."
+msgstr ""
+
+#: prefs.js:51
+msgid "Base size"
+msgstr ""
+
+#: prefs.js:51
+msgid "Icon size when the pointer is away."
+msgstr ""
+
+#: prefs.js:54
+msgid "Maximum magnification"
+msgstr ""
+
+#: prefs.js:54
+msgid "1.0 is the normal icon size."
+msgstr ""
+
+#: prefs.js:57
+msgid "Influence range"
+msgstr ""
+
+#: prefs.js:57
+msgid "How many neighboring icons take part in the wave."
+msgstr ""
+
+#: prefs.js:60
+msgid "Animation response"
+msgstr ""
+
+#: prefs.js:60
+msgid "Lower values react faster; higher values feel softer."
+msgstr ""
+
+#: prefs.js:63
+msgid "Show running applications"
+msgstr ""
+
+#: prefs.js:64
+msgid "Add open applications that are not favorites yet."
+msgstr ""
+
+#: prefs.js:66
+msgid "Container border"
+msgstr ""
+
+#: prefs.js:67
+msgid "Draw a subtle frame around the Dock, matched to the blur radius."
+msgstr ""
+
+#: prefs.js:69
+msgid "Indicators per application"
+msgstr ""
+
+#: prefs.js:69
+msgid ""
+"Dots below the icon represent open windows; this limit prevents clutter."
+msgstr ""
+
+#: prefs.js:72
+msgid "Hide this Dock in Activities"
+msgstr ""
+
+#: prefs.js:73
+msgid "Hide Maclike Dock while the overview is open."
+msgstr ""
+
+#: prefs.js:75
+msgid "Hide the original Dash"
+msgstr ""
+
+#: prefs.js:76
+msgid "Prevent the GNOME Dash from appearing in Activities."
+msgstr ""
+
+#: prefs.js:79
+msgid "Visibility"
+msgstr ""
+
+#: prefs.js:80
+msgid "Touch the bottom edge to reveal the Dock while it is hidden."
+msgstr ""
+
+#: prefs.js:84
+msgid "Always visible"
+msgstr ""
+
+#: prefs.js:85
+msgid "Auto-hide"
+msgstr ""
+
+#: prefs.js:86
+msgid "Dodge overlapping windows"
+msgstr ""
+
+#: prefs.js:90
+msgid "Visibility mode"
+msgstr ""
+
+#: prefs.js:91
+msgid "Dodge mode hides the Dock whenever a window enters its area."
+msgstr ""
+
+#: prefs.js:105
+msgid "Reserve space for maximized windows"
+msgstr ""
+
+#: prefs.js:106
+msgid "Maximized windows stop above the Dock and the Dock remains visible."
+msgstr ""
+
+#: prefs.js:108
+msgid "Hide delay"
+msgstr ""
+
+#: prefs.js:108
+msgid "Milliseconds before hiding starts."
+msgstr ""
+
+#: prefs.js:111
+msgid "Show delay"
+msgstr ""
+
+#: prefs.js:111
+msgid "Milliseconds after touching the bottom edge."
+msgstr ""
+
+#: prefs.js:114
+msgid "Transition duration"
+msgstr ""
+
+#: prefs.js:114
+msgid "Duration of the Dock entrance and exit."
+msgstr ""
+
+#: prefs.js:118
+msgid "Blur"
+msgstr ""
+
+#: prefs.js:119
+msgid ""
+"The native engine captures the area behind the Dock and requires no other "
+"extension."
+msgstr ""
+
+#: prefs.js:123
+msgid "Maclike Dock native"
+msgstr ""
+
+#: prefs.js:125
+msgid "No blur"
+msgstr ""
+
+#: prefs.js:129
+msgid "Blur engine"
+msgstr ""
+
+#: prefs.js:130
+msgid ""
+"Blur My Shell uses its Dash to Dock surface; the native mode is self-"
+"contained."
+msgstr ""
+
+#: prefs.js:142
+msgid "Native intensity"
+msgstr ""
+
+#: prefs.js:142
+msgid "Blur radius used by the built-in engine."
+msgstr ""
+
+#: prefs.js:145
+msgid "Native brightness"
+msgstr ""
+
+#: prefs.js:145
+msgid "Brightness multiplier for the captured background."
+msgstr ""
+
+#: prefs.js:149
+msgid "Folder stacks"
+msgstr ""
+
+#: prefs.js:150
+msgid "Click a folder to open its contents as a macOS-style fan or grid."
+msgstr ""
+
+#: prefs.js:154
+msgid "Folder icon"
+msgstr ""
+
+#: prefs.js:155
+msgid "Four recent file previews"
+msgstr ""
+
+#: prefs.js:158
+msgid "Dock icon"
+msgstr ""
+
+#: prefs.js:159
+msgid "The card stack previews the four most recently modified files."
+msgstr ""
+
+#: prefs.js:169
+msgid "Fan"
+msgstr ""
+
+#: prefs.js:169
+msgid "Grid"
+msgstr ""
+
+#: prefs.js:171
+msgid "Presentation"
+msgstr ""
+
+#: prefs.js:172
+msgid "Choose between a macOS-inspired fan and a compact grid."
+msgstr ""
+
+#: prefs.js:183
+msgid "Grid columns"
+msgstr ""
+
+#: prefs.js:183
+msgid "Used only by the grid presentation."
+msgstr ""
+
+#: prefs.js:186
+msgid "Visible items"
+msgstr ""
+
+#: prefs.js:186
+msgid "Remaining items stay available through “Open in Files”."
+msgstr ""
+
+#: prefs.js:190
+msgid "Most recent first"
+msgstr ""
+
+#: prefs.js:191
+msgid "Alphabetical name"
+msgstr ""
+
+#: prefs.js:194
+msgid "Stack order"
+msgstr ""
+
+#: prefs.js:207
+msgid "Dock folders"
+msgstr ""
+
+#: prefs.js:208
+msgid "Downloads is included by default. You can add any local folder."
+msgstr ""
+
+#: prefs.js:213
+msgid "Manage folders"
+msgstr ""
+
+#: prefs.js:214
+msgid "The order of this list matches the order in the Dock."
+msgstr ""
+
+#: prefs.js:219
+msgid "Add folder"
+msgstr ""
+
+#: prefs.js:241
+msgid "Remove from Dock"
+msgstr ""
+
+#: prefs.js:258
+msgid "Select a folder for the Dock"
+msgstr ""
+
+#: prefs.js:262
+msgid "Add"
+msgstr ""
+
+#: prefs.js:263
+msgid "Cancel"
+msgstr ""
+
+#: dock.js:269
+msgid "Border settings are unavailable"
+msgstr ""
+
+#: dock.js:478
+msgid "Unable to apply dynamic blur to the Dock"
+msgstr ""
+
+#: dock.js:884
+msgid "Unable to add folder"
+msgstr ""
+
+#: dock.js:1345
+msgid "Unable to detach the Blur My Shell surface"
+msgstr ""
+
+#: dockItem.js:221
+msgid "Force Quit"
+msgstr ""
+
+#: stackFan.js:47 stackFan.js:101
+msgid "Open in Files"
+msgstr ""
+
+#: stackFan.js:184 stackFan.js:475
+msgid "Unable to read this folder"
+msgstr ""
+
+#: stackFan.js:425
+msgid "Unable to apply Blur My Shell to the grid"
+msgstr ""

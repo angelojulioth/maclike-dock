@@ -1,0 +1,10 @@
+{
+  "uuid": "maclike-dock@angelojulioth.github.com",
+  "name": "Maclike Dock",
+  "description": "A fluid dock for GNOME Shell 50 with magnification, dynamic blur and folder stacks.",
+  "version": 21,
+  "gettext-domain": "maclike-dock",
+  "url": "https://github.com/angelojulioth/maclike-dock",
+  "shell-version": ["50"],
+  "settings-schema": "org.gnome.shell.extensions.maclike-dock"
+}

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <defs>
+    <radialGradient id="glass" cx="35%" cy="24%" r="78%">
+      <stop offset="0" stop-color="#f8ffff" stop-opacity="0.98"/>
+      <stop offset="0.58" stop-color="#dceceb" stop-opacity="0.96"/>
+      <stop offset="1" stop-color="#b8cece" stop-opacity="0.94"/>
+    </radialGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.92"/>
+      <stop offset="1" stop-color="#8fa9aa" stop-opacity="0.82"/>
+    </linearGradient>
+  </defs>
+  <circle cx="32" cy="32" r="28" fill="url(#glass)" stroke="url(#rim)" stroke-width="1.5"/>
+  <path d="M12.5 28.2c4.2-7.6 11.1-11.5 20.8-11.5h3.8v-6.3L52 23.9 37.1 37.4v-6.5h-4.2c-7.7 0-13.5 2.6-18 8.2-1.6 2-3 4.6-4.1 7.8.1-7.7.7-13.8 1.7-18.7z" fill="#38585b"/>
+  <path d="M13.4 27.6c5.2-6.4 11.6-9.2 20-9.2h5.4" fill="none" stroke="#668083" stroke-opacity="0.52" stroke-width="1.1" stroke-linecap="round"/>
+  <path d="M15.5 12.8a25.2 25.2 0 0 1 32.8-1.2" fill="none" stroke="#ffffff" stroke-opacity="0.68" stroke-width="2.1" stroke-linecap="round"/>
+</svg>
