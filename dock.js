@@ -208,6 +208,8 @@ export class MaclikeDock {
             this._syncDashBottomAnchor());
         this._connect(this._dash, 'notify::y', () =>
             this._syncDashBottomAnchor());
+        this._connect(this._dash, 'notify::allocation', () =>
+            this._syncDashBottomAnchor());
         this._connect(this._outer, 'notify::height', () =>
             this._syncDashBottomAnchor());
         this._connect(Main.layoutManager, 'monitors-changed', () => this._relayout());
@@ -720,16 +722,20 @@ export class MaclikeDock {
     _syncDashBottomAnchor() {
         if (!this._outer || !this._dash)
             return;
-        const outerHeight = this._outer.height;
-        const dashHeight = this._dash.height;
-        if (outerHeight <= 0 || dashHeight <= 0)
+        const parentHeight = this._dash.get_parent()?.height ??
+            this._outer.height;
+        const allocation = this._dash.get_allocation_box();
+        const dashY = allocation.y1;
+        const dashHeight = allocation.y2 - allocation.y1;
+        if (parentHeight <= 0 || dashHeight <= 0 ||
+            !Number.isFinite(dashY) || !Number.isFinite(dashHeight))
             return;
         // Some Shell themes centre #dash inside a Dash-to-Dock container,
-        // leaving half of the magnification reserve below the visible glass.
-        // Translate from the allocation Shell actually produced instead of
-        // relying on theme-sensitive alignment rules.
-        this._dash.translation_y = Math.max(0, Math.round(
-            outerHeight - this._dash.y - dashHeight));
+        // then switch it to bottom alignment after the first hover. The
+        // allocation box excludes our previous transform, so recomputing from
+        // it cannot apply the startup correction twice.
+        this._dash.translation_y = Math.round(
+            parentHeight - dashY - dashHeight);
     }
 
     _syncEdgeTrigger() {
@@ -1190,6 +1196,10 @@ export class MaclikeDock {
     _tick() {
         if (this._items.length === 0)
             return;
+
+        // Theme pseudo-class changes can reallocate #dash without notifying
+        // its y property. Keep the visible glass anchored during interaction.
+        this._syncDashBottomAnchor();
 
         const now = GLib.get_monotonic_time() / 1000;
         let delta = now - this._lastFrameTime;
