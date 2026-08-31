@@ -95,6 +95,7 @@ export class MaclikeDock {
         this._dockBlurEffect = null;
         this._dockCornerEffect = null;
         this._dockBlurEffectsManager = null;
+        this._bmsBlurSurface = null;
         this._dockBlurStatus = 'not-attached';
         this._nativeBlurSurface = null;
         this._strut = null;
@@ -158,6 +159,30 @@ export class MaclikeDock {
             trackFullscreen: true,
         });
 
+        this._edgeTrigger = new St.Widget({
+            name: 'maclike-dock-edge-trigger',
+            reactive: true,
+            track_hover: true,
+            style: 'background-color: rgba(0, 0, 0, 0.001);',
+        });
+        Main.layoutManager.addTopChrome(this._edgeTrigger, {
+            affectsStruts: false,
+            trackFullscreen: true,
+        });
+        this._connect(this._edgeTrigger, 'notify::hover', () => {
+            const now = GLib.get_monotonic_time() / 1000;
+            if (this._edgeTrigger.hover) {
+                this._edgeRevealLatched = true;
+                this._edgeRevealEnteredDock = false;
+                this._edgeRevealArmed = false;
+                this._edgeRevealUntil = now + EDGE_REVEAL_GRACE;
+                this._scheduleHidden(false, 0);
+            } else if (!this._pointerInside) {
+                this._edgeRevealUntil = now + EDGE_REVEAL_GRACE;
+                this._evaluateVisibility();
+            }
+        });
+
         this._tooltip = new St.Label({
             style_class: 'maclike-dock-tooltip',
             visible: false,
@@ -177,6 +202,14 @@ export class MaclikeDock {
             if (!this._dash.hover)
                 this._releaseMagnification();
         });
+        this._connect(this._dash, 'notify::width', () =>
+            this._syncEdgeTrigger());
+        this._connect(this._dash, 'notify::height', () =>
+            this._syncDashBottomAnchor());
+        this._connect(this._dash, 'notify::y', () =>
+            this._syncDashBottomAnchor());
+        this._connect(this._outer, 'notify::height', () =>
+            this._syncDashBottomAnchor());
         this._connect(Main.layoutManager, 'monitors-changed', () => this._relayout());
         this._connect(this._interfaceSettings, 'changed::color-scheme', () => {
             this._syncColorScheme();
@@ -326,10 +359,18 @@ export class MaclikeDock {
             this._dash._background.set_style(
                 `border-radius: ${radius}px; ` +
                 'background-color: transparent; box-shadow: none;');
+            if (this._bmsBlurSurface) {
+                const tint = this._darkTheme
+                    ? 'rgba(18, 22, 29, 0.32)'
+                    : 'rgba(210, 222, 239, 0.18)';
+                this._bmsBlurSurface.set_style(
+                    `border-radius: ${radius}px; ` +
+                    `background-color: ${tint}; box-shadow: none;`);
+            }
         } else if (this._dockBlurEffect || this._nativeBlurSurface) {
             const tint = this._darkTheme
-                ? 'rgba(20, 24, 32, 0.46)'
-                : 'rgba(205, 218, 239, 0.25)';
+                ? 'rgba(18, 22, 29, 0.32)'
+                : 'rgba(210, 222, 239, 0.18)';
             this._dash._background.set_style(
                 `border-radius: ${radius}px; ` +
                 `background-color: ${tint}; box-shadow: none;`);
@@ -443,11 +484,18 @@ export class MaclikeDock {
         const attachedActor = this._dockBlurEffect?.get_actor?.();
         const maskActor = this._dockCornerEffect?.get_actor?.();
         if (this._dockBlurEffectsManager !== effectsManager ||
-            attachedActor !== this._dash._background ||
-            maskActor !== this._dash._background) {
+            attachedActor !== this._bmsBlurSurface ||
+            maskActor !== this._bmsBlurSurface) {
             this._detachDynamicDockBlur();
             try {
                 const radius = this._getBmsDockRadius();
+                this._bmsBlurSurface = new St.Widget({
+                    name: 'maclike-bms-blur-surface',
+                    reactive: false,
+                    x_expand: true,
+                    y_expand: true,
+                });
+                this._nativeBlurLayer.add_child(this._bmsBlurSurface);
                 this._dockBlurEffectsManager = effectsManager;
                 this._dockBlurEffect =
                     effectsManager.new_native_dynamic_gaussian_blur_effect({
@@ -462,8 +510,8 @@ export class MaclikeDock {
                 });
                 // Clutter paints effects in reverse get_effects() order.
                 // Add the mask first so it clips pixels expanded by the blur.
-                this._dash._background.add_effect(this._dockCornerEffect);
-                this._dash._background.add_effect(this._dockBlurEffect);
+                this._bmsBlurSurface.add_effect(this._dockCornerEffect);
+                this._bmsBlurSurface.add_effect(this._dockBlurEffect);
                 this._dockBlurEffect.unscaled_corner_radius = radius;
                 this._dockBlurStatus = 'attached-dynamic-bms-effect-and-mask';
             } catch (error) {
@@ -600,7 +648,7 @@ export class MaclikeDock {
                 this._dockBlurEffectsManager?.remove(this._dockCornerEffect);
             } catch {
                 try {
-                    this._dash?._background?.remove_effect(
+                    this._bmsBlurSurface?.remove_effect(
                         this._dockCornerEffect);
                 } catch {
                     // Blur My Shell already removed the mask.
@@ -612,7 +660,7 @@ export class MaclikeDock {
                 this._dockBlurEffectsManager?.remove(this._dockBlurEffect);
             } catch {
                 try {
-                    this._dash?._background?.remove_effect(this._dockBlurEffect);
+                    this._bmsBlurSurface?.remove_effect(this._dockBlurEffect);
                 } catch {
                     // Blur My Shell already removed the effect.
                 }
@@ -621,6 +669,8 @@ export class MaclikeDock {
         this._dockCornerEffect = null;
         this._dockBlurEffect = null;
         this._dockBlurEffectsManager = null;
+        this._bmsBlurSurface?.destroy();
+        this._bmsBlurSurface = null;
         this._applyDockBackgroundStyle(this._getBmsDockRadius());
     }
 
@@ -660,9 +710,42 @@ export class MaclikeDock {
         this._outer.set_position(monitor.x,
             monitor.y + monitor.height - outerHeight - DOCK_BOTTOM_GAP);
         this._outer.set_size(monitor.width, outerHeight);
+        this._syncDashBottomAnchor();
+        this._syncEdgeTrigger();
         if (this._hidden)
             this._outer.translation_y = this._outer.height - 2;
         this._syncStrut();
+    }
+
+    _syncDashBottomAnchor() {
+        if (!this._outer || !this._dash)
+            return;
+        const outerHeight = this._outer.height;
+        const dashHeight = this._dash.height;
+        if (outerHeight <= 0 || dashHeight <= 0)
+            return;
+        // Some Shell themes centre #dash inside a Dash-to-Dock container,
+        // leaving half of the magnification reserve below the visible glass.
+        // Translate from the allocation Shell actually produced instead of
+        // relying on theme-sensitive alignment rules.
+        this._dash.translation_y = Math.max(0, Math.round(
+            outerHeight - this._dash.y - dashHeight));
+    }
+
+    _syncEdgeTrigger() {
+        if (!this._edgeTrigger || !this._dash)
+            return;
+        const monitor = Main.layoutManager.primaryMonitor;
+        if (!monitor)
+            return;
+        const [, preferredWidth] = this._dash.get_preferred_width(-1);
+        const width = Math.max(1, Math.ceil(
+            this._dash.width > 0 ? this._dash.width : preferredWidth));
+        const triggerWidth = Math.min(monitor.width, width + 24);
+        this._edgeTrigger.set_position(
+            Math.round(monitor.x + (monitor.width - triggerWidth) / 2),
+            monitor.y + monitor.height - 2);
+        this._edgeTrigger.set_size(triggerWidth, 2);
     }
 
     _syncStrut() {
@@ -720,6 +803,9 @@ export class MaclikeDock {
         const renderSize = Math.ceil(iconSize * maxScale);
         const slotSize = iconSize + 12;
         const maxDots = this._settings.get_int('indicator-max-dots');
+        // Fix the glass height before Clutter's first allocation. The outer
+        // actor remains taller to reserve headroom for magnified icons.
+        this._dash.set_height(iconSize + 25);
 
         const favorites = AppFavorites.getAppFavorites().getFavorites();
         const favoriteIds = new Set(favorites.map(app => app.get_id()));
@@ -904,10 +990,10 @@ export class MaclikeDock {
         const [dashX] = this._dash.get_transformed_position();
         const [dashWidth] = this._dash.get_transformed_size();
         const bottom = monitor.y + monitor.height;
-        return dashWidth > 0 &&
+        return Boolean(this._edgeTrigger?.hover) || (dashWidth > 0 &&
             this._pointerX >= dashX - 10 &&
             this._pointerX <= dashX + dashWidth + 10 &&
-            this._pointerY >= bottom - 3 && this._pointerY <= bottom;
+            this._pointerY >= bottom - 3 && this._pointerY <= bottom);
     }
 
     _finishEdgeReveal() {
@@ -1245,9 +1331,18 @@ export class MaclikeDock {
                 this._overviewDash.show();
         }
         this._tooltip?.destroy();
+        if (this._edgeTrigger) {
+            try {
+                Main.layoutManager.removeChrome(this._edgeTrigger);
+            } catch {
+                // Shell may already have removed the hot edge.
+            }
+            this._edgeTrigger.destroy();
+        }
         this._outer?.destroy();
         this._timeline = null;
         this._tooltip = null;
+        this._edgeTrigger = null;
         this._outer = null;
         this._dash = null;
         this._border = null;

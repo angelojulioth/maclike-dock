@@ -285,14 +285,16 @@ class FolderDockItem extends DockItem {
             width: size,
             height: size,
         });
-        const cardSize = Math.round(size * 0.78);
+        const cardWidth = Math.round(size * 0.86);
+        const cardHeight = Math.round(size * 0.98);
         const layouts = [
-            [0.075, 0.115], [0.145, 0.095],
-            [0.095, 0.060], [0.135, 0.025],
+            [0.04, 0.015], [0.08, 0.012],
+            [0.10, 0.008], [0.07, 0.0],
         ];
-        for (let index = 0; index < Math.min(4, files.length); index++) {
+        const previews = files.slice(0, 4).reverse();
+        for (let index = 0; index < previews.length; index++) {
             const [x, y] = layouts[index];
-            const entry = files[index];
+            const entry = previews[index];
             const thumbnailPath = entry.info.get_attribute_boolean(
                 'thumbnail::is-valid')
                 ? entry.info.get_attribute_byte_string('thumbnail::path')
@@ -309,11 +311,11 @@ class FolderDockItem extends DockItem {
                 style_class: 'maclike-folder-card',
                 child: new St.Icon({
                     gicon: previewIcon,
-                    icon_size: cardSize - 6,
+                    icon_size: cardWidth - 4,
                     opacity: 255,
                 }),
-                width: cardSize,
-                height: cardSize,
+                width: cardWidth,
+                height: cardHeight,
             });
             card.set_pivot_point(0.5, 0.8);
             card.rotation_angle_z = 0;
