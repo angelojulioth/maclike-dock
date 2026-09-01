@@ -1,6 +1,6 @@
 UUID = maclike-dock@angelojulioth.github.io
 ZIP = $(UUID).zip
-RUNTIME = metadata.json extension.js dock.js dockItem.js stackFan.js \
+RUNTIME = metadata.json extension.js prefs.js dock.js dockItem.js stackFan.js \
 	nativeBlur.js stylesheet.css icons schemas locale LICENSE
 
 .PHONY: all schemas translations package clean

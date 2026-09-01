@@ -101,6 +101,7 @@ export class MaclikeDock {
         this._strut = null;
         this._launchPinned = false;
         this._launchPinTimeout = 0;
+        this._launchAppSignals = [];
         this._lastSignature = null;
         this._visibilityTimeout = 0;
         this._windowWatchId = 0;
@@ -680,20 +681,68 @@ export class MaclikeDock {
         this._graceUntil = GLib.get_monotonic_time() / 1000 + INTERACTION_GRACE;
     }
 
-    _onItemActivated() {
+    _onItemActivated(app) {
         this._noteInteraction();
-        this._pinLaunch();
+        if (app?.get_state() === Shell.AppState.STOPPED)
+            this._pinLaunch(app);
     }
 
-    _pinLaunch() {
-        this._launchPinned = true;
+    _disconnectLaunchAppSignals() {
+        for (const [object, id] of this._launchAppSignals) {
+            try {
+                object.disconnect(id);
+            } catch {
+                // The application may have disappeared while launching.
+            }
+        }
+        this._launchAppSignals = [];
+    }
+
+    _finishLaunchPin(delay = 0) {
         if (this._launchPinTimeout) {
             GLib.source_remove(this._launchPinTimeout);
             this._launchPinTimeout = 0;
         }
+        this._disconnectLaunchAppSignals();
+        const finish = () => {
+            this._launchPinTimeout = 0;
+            this._launchPinned = false;
+            this._evaluateVisibility();
+        };
+        if (delay <= 0) {
+            finish();
+            return;
+        }
+        this._launchPinTimeout = GLib.timeout_add_once(
+            GLib.PRIORITY_DEFAULT, delay, finish);
+        GLib.Source.set_name_by_id(this._launchPinTimeout,
+            '[maclike-dock] launch settle');
+    }
+
+    _pinLaunch(app) {
+        if (this._launchPinTimeout) {
+            GLib.source_remove(this._launchPinTimeout);
+            this._launchPinTimeout = 0;
+        }
+        this._disconnectLaunchAppSignals();
+        this._launchPinned = true;
+        const settleWhenMapped = () => {
+            if (!this._launchPinned ||
+                app.get_state() !== Shell.AppState.RUNNING ||
+                app.get_windows().length === 0)
+                return;
+            // Let Mutter finish the first window allocation before dodge is
+            // allowed to evaluate overlap. This prevents hide/show oscillation
+            // while an application is mapping.
+            this._finishLaunchPin(320);
+        };
+        this._launchAppSignals.push(
+            [app, app.connect('notify::state', settleWhenMapped)],
+            [app, app.connect('windows-changed', settleWhenMapped)]);
         this._launchPinTimeout = GLib.timeout_add_once(
             GLib.PRIORITY_DEFAULT, LAUNCH_PIN_MS, () => {
                 this._launchPinTimeout = 0;
+                this._disconnectLaunchAppSignals();
                 this._launchPinned = false;
                 this._evaluateVisibility();
             });
@@ -828,7 +877,7 @@ export class MaclikeDock {
             this._addItem(new AppDockItem(
                 app, iconSize, renderSize, slotSize,
                 (open, item) => this._onMenuChanged(open, item), maxDots,
-                () => this._onItemActivated()));
+                activatedApp => this._onItemActivated(activatedApp)));
         }
 
         const folders = this._resolveFolderPaths();
@@ -1069,6 +1118,16 @@ export class MaclikeDock {
         const mode = this._settings.get_string('visibility-mode');
         const interactionOpen = this._menuOpen || Boolean(this._stack);
         const pinnedOpen = interactionOpen || this._launchPinned;
+        let pointerOverDock = this._pointerInside;
+        if (!this._hidden && !pointerOverDock) {
+            try {
+                const [pointerX, pointerY] = global.get_pointer();
+                pointerOverDock = this._isInsideDock(pointerX, pointerY);
+            } catch {
+                pointerOverDock = this._isInsideDock(
+                    this._pointerX, this._pointerY);
+            }
+        }
         const edge = this._isAtRevealEdge();
         const now = GLib.get_monotonic_time() / 1000;
         if (this._edgeRevealLatched && !this._edgeRevealEnteredDock &&
@@ -1098,10 +1157,11 @@ export class MaclikeDock {
             shouldHide = false;
         } else if (mode === 'dodge') {
             const overlap = this._hasOverlappingWindow();
-            // A real overlap takes precedence over the launch pin. Menus,
-            // stacks, direct pointer interaction and edge reveal remain usable.
-            if (overlap && !this._pointerInside &&
-                    !edgeRevealActive && !interactionOpen) {
+            // Keep a launch stable while Mutter maps its first window. Stored
+            // pointer coordinates also survive the transient hover loss caused
+            // by the new client receiving keyboard focus.
+            if (overlap && !pointerOverDock &&
+                    !edgeRevealActive && !pinnedOpen) {
                 shouldHide = true;
                 immediate = true;
             }
@@ -1300,6 +1360,7 @@ export class MaclikeDock {
             GLib.source_remove(this._windowWatchId);
         if (this._launchPinTimeout)
             GLib.source_remove(this._launchPinTimeout);
+        this._disconnectLaunchAppSignals();
         for (const id of this._startupRelayoutIds)
             GLib.source_remove(id);
         this._startupRelayoutIds = [];

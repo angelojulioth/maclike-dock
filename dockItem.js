@@ -108,7 +108,7 @@ class AppDockItem extends DockItem {
             slotSize,
             activate: button => this._activateApp(button),
             menuChanged,
-            onActivated,
+            onActivated: () => onActivated?.(app),
         });
 
         this._app = app;
