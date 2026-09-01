@@ -175,11 +175,11 @@ export default class MaclikeDockPreferences extends ExtensionPreferences {
         page.add(stacks);
         const iconModel = Gtk.StringList.new([
             _('Folder icon'),
-            _('Four recent file previews'),
+            _('Recent file previews'),
         ]);
         const iconRow = new Adw.ComboRow({
             title: _('Dock icon'),
-            subtitle: _('The card stack previews the four most recently modified files.'),
+            subtitle: _('The card stack previews the most recently modified files.'),
             model: iconModel,
             selected: settings.get_string('folder-icon-style') === 'stack' ? 1 : 0,
         });
@@ -189,6 +189,10 @@ export default class MaclikeDockPreferences extends ExtensionPreferences {
             iconRow.selected = settings.get_string('folder-icon-style') === 'stack' ? 1 : 0;
         });
         stacks.add(iconRow);
+        addSpin(stacks, settings, 'folder-card-count',
+            _('Preview cards'),
+            _('Number of recent files shown in the Dock stack.'),
+            2, 10, 1);
         addSpin(stacks, settings, 'folder-card-spread',
             _('Card spread'),
             _('Maximum upward separation as a percentage of the icon size.'),

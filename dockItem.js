@@ -289,9 +289,10 @@ class AppDockItem extends DockItem {
 export const FolderDockItem = GObject.registerClass(
 class FolderDockItem extends DockItem {
     _init({file, label, iconSize, renderSize, slotSize, activate,
-            iconStyle = 'folder', cardSpread = 36}) {
+            iconStyle = 'folder', cardSpread = 36, cardCount = 4}) {
+        const previewCount = Math.clamp(cardCount, 2, 10);
         const icon = iconStyle === 'stack'
-            ? this._createRecentFilesStack(file, renderSize)
+            ? this._createRecentFilesStack(file, renderSize, previewCount)
             : new St.Icon({gicon: file.query_info(
                 'standard::icon', Gio.FileQueryInfoFlags.NONE, null).get_icon()});
         super._init({label, icon, iconSize, renderSize, slotSize, activate});
@@ -299,13 +300,14 @@ class FolderDockItem extends DockItem {
         this._folderIconStyle = iconStyle;
         this._cardStack = iconStyle === 'stack' ? icon : null;
         this._cardSpread = Math.clamp(cardSpread, 15, 60) / 100;
+        this._cardCount = previewCount;
         this._cardHoverSignal = this._cardStack
             ? this.connect('notify::hover', () =>
                 this._setCardSpread(this.hover))
             : 0;
     }
 
-    _createRecentFilesStack(file, size) {
+    _createRecentFilesStack(file, size, previewCount) {
         const files = [];
         const enumerator = file.enumerate_children(
             'standard::icon,standard::name,standard::content-type,' +
@@ -327,11 +329,14 @@ class FolderDockItem extends DockItem {
         });
         const cardWidth = Math.round(size * 0.86);
         const cardHeight = Math.round(size * 0.98);
-        const compactLayout = [
-            [0.07, 0.018], [0.07, 0.012],
-            [0.07, 0.006], [0.07, 0.0],
-        ];
-        const previews = files.slice(0, 4).reverse();
+        const previews = files.slice(0, previewCount).reverse();
+        const compactLayout = previews.map((_entry, index) => [
+            0.07,
+            previews.length > 1
+                ? 0.018 * (previews.length - 1 - index) /
+                    (previews.length - 1)
+                : 0,
+        ]);
         const cards = [];
         for (let index = 0; index < previews.length; index++) {
             const [x, y] = compactLayout[index];
@@ -350,6 +355,8 @@ class FolderDockItem extends DockItem {
                     : entry.info.get_icon();
             const card = new St.Bin({
                 style_class: 'maclike-folder-card',
+                reactive: true,
+                track_hover: true,
                 child: new St.Icon({
                     gicon: previewIcon,
                     icon_size: cardWidth - 4,
@@ -373,7 +380,33 @@ class FolderDockItem extends DockItem {
         stack._previewCards = cards;
         stack._compactLayout = compactLayout;
         stack._previewSize = size;
+        stack._cardHoverSignals = cards.map(card => [
+            card,
+            card.connect('notify::hover', () => {
+                if (card.hover)
+                    this._raisePreviewCard(card);
+                else if (stack._hoveredCard === card)
+                    this._restorePreviewCardOrder();
+            }),
+        ]);
         return stack;
+    }
+
+    _raisePreviewCard(card) {
+        const stack = this._cardStack;
+        if (!stack || !stack._previewCards.includes(card))
+            return;
+        stack._hoveredCard = card;
+        stack.set_child_above_sibling(card, null);
+    }
+
+    _restorePreviewCardOrder() {
+        const stack = this._cardStack;
+        if (!stack)
+            return;
+        for (const card of stack._previewCards)
+            stack.set_child_above_sibling(card, null);
+        stack._hoveredCard = null;
     }
 
     _setCardSpread(spread) {
@@ -412,6 +445,17 @@ class FolderDockItem extends DockItem {
             this.disconnect(this._cardHoverSignal);
             this._cardHoverSignal = 0;
         }
+        for (const [card, id] of
+            this._cardStack?._cardHoverSignals ?? []) {
+            try {
+                card.disconnect(id);
+            } catch {
+                // The preview may already have been disposed during rebuild.
+            }
+        }
+        if (this._cardStack)
+            this._cardStack._cardHoverSignals = [];
+        this._restorePreviewCardOrder();
         this._setCardSpread(false);
         super.cleanup();
     }

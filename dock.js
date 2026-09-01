@@ -28,6 +28,7 @@ const REBUILD_KEYS = new Set([
     'folder-paths',
     'folder-icon-style',
     'folder-card-spread',
+    'folder-card-count',
     'indicator-max-dots',
 ]);
 
@@ -967,6 +968,7 @@ export class MaclikeDock {
                     iconStyle: this._settings.get_string('folder-icon-style'),
                     cardSpread: this._settings.get_int(
                         'folder-card-spread'),
+                    cardCount: this._settings.get_int('folder-card-count'),
                 });
                 this._addItem(item);
             } catch (error) {

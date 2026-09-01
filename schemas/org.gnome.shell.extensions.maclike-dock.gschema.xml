@@ -110,6 +110,11 @@
       <default>36</default>
       <summary>Vertical spread of folder preview cards</summary>
     </key>
+    <key name="folder-card-count" type="i">
+      <range min="2" max="10"/>
+      <default>4</default>
+      <summary>Number of folder preview cards</summary>
+    </key>
     <key name="stack-max-items" type="i">
       <range min="4" max="20"/>
       <default>10</default>
