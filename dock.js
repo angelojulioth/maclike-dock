@@ -96,6 +96,7 @@ export class MaclikeDock {
         this._dockCornerEffect = null;
         this._dockBlurEffectsManager = null;
         this._bmsBlurSurface = null;
+        this._usesManagedBmsBlur = false;
         this._dockBlurStatus = 'not-attached';
         this._nativeBlurSurface = null;
         this._strut = null;
@@ -211,6 +212,8 @@ export class MaclikeDock {
             this._syncDashBottomAnchor());
         this._connect(this._dash, 'notify::allocation', () =>
             this._syncDashBottomAnchor());
+        this._connect(this._dash._background, 'notify::allocation', () =>
+            this._syncManagedBmsBlurGeometry());
         this._connect(this._outer, 'notify::height', () =>
             this._syncDashBottomAnchor());
         this._connect(Main.layoutManager, 'monitors-changed', () => this._relayout());
@@ -359,17 +362,12 @@ export class MaclikeDock {
             return;
         const usesBms = this._settings?.get_string('blur-engine') === 'bms';
         if (usesBms) {
+            const tint = this._darkTheme
+                ? 'rgba(18, 22, 29, 0.24)'
+                : 'rgba(210, 222, 239, 0.15)';
             this._dash._background.set_style(
                 `border-radius: ${radius}px; ` +
-                'background-color: transparent; box-shadow: none;');
-            if (this._bmsBlurSurface) {
-                const tint = this._darkTheme
-                    ? 'rgba(18, 22, 29, 0.32)'
-                    : 'rgba(210, 222, 239, 0.18)';
-                this._bmsBlurSurface.set_style(
-                    `border-radius: ${radius}px; ` +
-                    `background-color: ${tint}; box-shadow: none;`);
-            }
+                `background-color: ${tint}; box-shadow: none;`);
         } else if (this._dockBlurEffect || this._nativeBlurSurface) {
             const tint = this._darkTheme
                 ? 'rgba(18, 22, 29, 0.32)'
@@ -473,63 +471,67 @@ export class MaclikeDock {
 
         const managedInfo = bms?._dash_to_dock_blur?.dashes
             ?.find(candidate => candidate.dash === this._dash);
-        if (managedInfo?.background_group) {
-            this._bmsDashInfo = managedInfo;
-            // Blur My Shell sizes its Dash-to-Dock surface from the outer
-            // magnification reserve. That allocation is deliberately taller
-            // than the visible glass, so its managed surface cannot be used
-            // without leaking the startup geometry around the Dock. Keep that
-            // actor hidden and attach BMS's own effects to the exact visible
-            // background actor instead.
-            managedInfo.background_group.hide();
+        if (!managedInfo?.background_group || !managedInfo.background) {
+            this._detachDynamicDockBlur();
+            this._dockBlurStatus = 'waiting-for-blur-my-shell-dash-surface';
+            return;
         }
 
-        const attachedActor = this._dockBlurEffect?.get_actor?.();
-        const maskActor = this._dockCornerEffect?.get_actor?.();
-        if (this._dockBlurEffectsManager !== effectsManager ||
-            attachedActor !== this._bmsBlurSurface ||
-            maskActor !== this._bmsBlurSurface) {
-            this._detachDynamicDockBlur();
-            try {
-                const radius = this._getBmsDockRadius();
-                this._bmsBlurSurface = new St.Widget({
-                    name: 'maclike-bms-blur-surface',
-                    reactive: false,
-                    x_expand: true,
-                    y_expand: true,
-                });
-                this._nativeBlurLayer.add_child(this._bmsBlurSurface);
-                this._dockBlurEffectsManager = effectsManager;
-                this._dockBlurEffect =
-                    effectsManager.new_native_dynamic_gaussian_blur_effect({
-                        unscaled_radius: 2 * dashSettings.SIGMA,
-                        brightness: dashSettings.BRIGHTNESS,
-                        corner_radius: radius,
-                    });
-                this._dockCornerEffect = effectsManager.new_corner_effect({
-                    radius,
-                    corners_top: true,
-                    corners_bottom: true,
-                });
-                // Clutter paints effects in reverse get_effects() order.
-                // Add the mask first so it clips pixels expanded by the blur.
-                this._bmsBlurSurface.add_effect(this._dockCornerEffect);
-                this._bmsBlurSurface.add_effect(this._dockBlurEffect);
-                this._dockBlurEffect.unscaled_corner_radius = radius;
-                this._dockBlurStatus = 'attached-dynamic-bms-effect-and-mask';
-            } catch (error) {
-                this._dockBlurStatus = `error: ${error}`;
-                this._logger.warn(
-                    `${_('Unable to apply dynamic blur to the Dock')}: ` +
-                    `${error}`);
-                this._detachDynamicDockBlur();
-                return;
-            }
-        }
+        this._attachManagedBmsBlur(managedInfo, effectsManager);
         this._trackBmsDashManager();
         this._syncDynamicDockBlur();
-        this._hideManagedBmsDashSurface();
         this._syncBorder();
+    }
+
+    _attachManagedBmsBlur(managedInfo, effectsManager) {
+        if (!this._usesManagedBmsBlur || this._bmsDashInfo !== managedInfo ||
+                this._bmsBlurSurface !== managedInfo.background) {
+            this._detachDynamicDockBlur();
+            this._bmsDashInfo = managedInfo;
+            this._bmsBlurSurface = managedInfo.background;
+            this._dockBlurEffectsManager = effectsManager;
+            this._dockBlurEffect = managedInfo.bg_manager?._bms_pipeline
+                ?.effect ?? this._bmsBlurSurface.get_effects().find(effect =>
+                'unscaled_radius' in effect || 'radius' in effect) ?? null;
+            this._dockCornerEffect = null;
+            this._usesManagedBmsBlur = true;
+        }
+        managedInfo.background_group.show();
+        this._syncManagedBmsBlurGeometry();
+        this._dockBlurStatus = global.blur_my_shell?._settings?.dash_to_dock
+            ?.STATIC_BLUR
+            ? 'attached-managed-bms-static-surface'
+            : 'attached-managed-bms-dynamic-surface';
+    }
+
+    _syncManagedBmsBlurGeometry() {
+        if (!this._usesManagedBmsBlur || !this._bmsDashInfo ||
+                !this._bmsBlurSurface || !this._dash?._background)
+            return;
+        const dashSettings = global.blur_my_shell?._settings?.dash_to_dock;
+        if (!dashSettings || dashSettings.STATIC_BLUR) {
+            this._dockBlurEffect?.queue_repaint?.();
+            return;
+        }
+
+        const backgroundBox = this._dash._background.get_allocation_box();
+        const width = backgroundBox.x2 - backgroundBox.x1;
+        const height = backgroundBox.y2 - backgroundBox.y1;
+        if (width <= 0 || height <= 0)
+            return;
+        const [targetX, targetY] =
+            this._dash._background.get_transformed_position();
+        const [groupX, groupY] =
+            this._bmsDashInfo.background_group.get_transformed_position();
+        // BMS keeps a zero-sized BackgroundGroup centred in the monitor and
+        // positions its blur child in that local coordinate space. Convert
+        // the exact visible glass position back into the same space.
+        this._bmsBlurSurface.set_position(
+            Math.round(targetX - groupX),
+            Math.round(targetY - groupY));
+        this._bmsBlurSurface.set_size(
+            Math.round(width), Math.round(height));
+        this._dockBlurEffect?.queue_repaint?.();
     }
 
     _attachNativeBlur() {
@@ -574,6 +576,13 @@ export class MaclikeDock {
     }
 
     _syncDynamicDockBlur() {
+        if (this._usesManagedBmsBlur) {
+            const radius = this._getBmsDockRadius();
+            this._syncManagedBmsBlurGeometry();
+            this._applyDockBackgroundStyle(radius);
+            this._border?.set_style(`border-radius: ${radius}px;`);
+            return;
+        }
         if (!this._dockBlurEffect)
             return;
         const dashSettings = global.blur_my_shell?._settings?.dash_to_dock;
@@ -601,10 +610,7 @@ export class MaclikeDock {
             return;
         const reassert = () => {
             if (this._settings.get_string('blur-engine') === 'bms') {
-                this._bmsDashInfo = global.blur_my_shell?._dash_to_dock_blur
-                    ?.dashes?.find(candidate => candidate.dash === this._dash);
-                this._bmsDashInfo?.background_group?.hide();
-                this._syncDynamicDockBlur();
+                this._refreshDynamicDockBlur();
             } else {
                 this._hideManagedBmsDashSurface();
                 this._syncDynamicDockBlur();
@@ -645,6 +651,21 @@ export class MaclikeDock {
     }
 
     _detachDynamicDockBlur() {
+        if (this._usesManagedBmsBlur) {
+            try {
+                this._bmsDashInfo?.background_group?.hide();
+            } catch {
+                // BMS may already have replaced or destroyed this surface.
+            }
+            this._dockCornerEffect = null;
+            this._dockBlurEffect = null;
+            this._dockBlurEffectsManager = null;
+            this._bmsBlurSurface = null;
+            this._bmsDashInfo = null;
+            this._usesManagedBmsBlur = false;
+            this._applyDockBackgroundStyle(this._getBmsDockRadius());
+            return;
+        }
         this._bmsDashInfo = null;
         if (this._dockCornerEffect) {
             try {
@@ -674,6 +695,7 @@ export class MaclikeDock {
         this._dockBlurEffectsManager = null;
         this._bmsBlurSurface?.destroy();
         this._bmsBlurSurface = null;
+        this._usesManagedBmsBlur = false;
         this._applyDockBackgroundStyle(this._getBmsDockRadius());
     }
 
@@ -791,6 +813,7 @@ export class MaclikeDock {
             containerHeight - dashY - dashHeight, 0, maxCorrection));
         if (this._dash.translation_y !== correction)
             this._dash.translation_y = correction;
+        this._syncManagedBmsBlurGeometry();
     }
 
     _syncEdgeTrigger() {
@@ -1397,21 +1420,21 @@ export class MaclikeDock {
         this._launchPinTimeout = 0;
         this._destroyStrut();
         this._disconnectBmsSettings();
-        if (this._bmsDashInfo?.remove_dash_blur) {
+        const bmsDashInfo = this._bmsDashInfo;
+        this._disconnectBmsDashManager();
+        this._detachDynamicDockBlur();
+        if (bmsDashInfo?.remove_dash_blur) {
             try {
                 // Let Blur My Shell detach while both sibling actors still
                 // have a parent. Its dash destroy handler otherwise runs after
                 // Clutter has already disposed the managed background group.
-                this._bmsDashInfo.remove_dash_blur();
+                bmsDashInfo.remove_dash_blur();
             } catch (error) {
                 this._logger.warn(
                     `${_('Unable to detach the Blur My Shell surface')}: ` +
                     `${error}`);
             }
-            this._bmsDashInfo = null;
         }
-        this._disconnectBmsDashManager();
-        this._detachDynamicDockBlur();
         this._detachNativeBlur();
         for (const [object, id] of this._signals) {
             try {
