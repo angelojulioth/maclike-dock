@@ -289,7 +289,7 @@ class AppDockItem extends DockItem {
 export const FolderDockItem = GObject.registerClass(
 class FolderDockItem extends DockItem {
     _init({file, label, iconSize, renderSize, slotSize, activate,
-            iconStyle = 'folder'}) {
+            iconStyle = 'folder', cardSpread = 36}) {
         const icon = iconStyle === 'stack'
             ? this._createRecentFilesStack(file, renderSize)
             : new St.Icon({gicon: file.query_info(
@@ -298,6 +298,7 @@ class FolderDockItem extends DockItem {
         this.add_style_class_name('maclike-dock-folder-item');
         this._folderIconStyle = iconStyle;
         this._cardStack = iconStyle === 'stack' ? icon : null;
+        this._cardSpread = Math.clamp(cardSpread, 15, 60) / 100;
         this._cardHoverSignal = this._cardStack
             ? this.connect('notify::hover', () =>
                 this._setCardSpread(this.hover))
@@ -327,8 +328,8 @@ class FolderDockItem extends DockItem {
         const cardWidth = Math.round(size * 0.86);
         const cardHeight = Math.round(size * 0.98);
         const compactLayout = [
-            [0.04, 0.015], [0.08, 0.012],
-            [0.10, 0.008], [0.07, 0.0],
+            [0.07, 0.018], [0.07, 0.012],
+            [0.07, 0.006], [0.07, 0.0],
         ];
         const previews = files.slice(0, 4).reverse();
         const cards = [];
@@ -382,26 +383,22 @@ class FolderDockItem extends DockItem {
 
         // These are paint-only transforms. Unlike animating x/y inside a
         // FixedLayout, translations never invalidate the stack's preferred
-        // size or the Dock allocation while the cards fan out.
-        const offsets = {
-            2: [[-0.025, -0.120], [0.035, -0.020]],
-            3: [[-0.035, -0.190], [0.000, -0.105], [0.040, -0.020]],
-            4: [
-                [-0.045, -0.250], [-0.015, -0.170],
-                [0.020, -0.090], [0.055, -0.015],
-            ],
-        }[stack._previewCards.length];
+        // size or the Dock allocation while the cards spread upward.
+        const cardCount = stack._previewCards.length;
+        const maxLift = stack._previewSize * this._cardSpread;
         const duration = spread ? 200 : 240;
         const mode = spread
             ? Clutter.AnimationMode.EASE_OUT_CUBIC
             : Clutter.AnimationMode.EASE_OUT_QUAD;
         for (let index = 0; index < stack._previewCards.length; index++) {
             const card = stack._previewCards[index];
-            const [x, y] = spread ? offsets[index] : [0, 0];
+            const lift = spread && cardCount > 1
+                ? maxLift * (cardCount - 1 - index) / (cardCount - 1)
+                : 0;
             card.remove_all_transitions();
             card.ease({
-                translation_x: Math.round(stack._previewSize * x),
-                translation_y: Math.round(stack._previewSize * y),
+                translation_x: 0,
+                translation_y: -Math.round(lift),
                 duration,
                 mode,
             });

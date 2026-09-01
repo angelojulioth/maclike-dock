@@ -27,6 +27,7 @@ const REBUILD_KEYS = new Set([
     'show-running-apps',
     'folder-paths',
     'folder-icon-style',
+    'folder-card-spread',
     'indicator-max-dots',
 ]);
 
@@ -148,11 +149,13 @@ export class MaclikeDock {
         });
         this._dash.add_child(this._nativeBlurLayer);
         this._dash.add_child(this._dash._background);
-        this._dash.add_child(this._itemsBox);
         // The border is deliberately independent from dash-background.
         // Blur My Shell replaces the dash style class and owns the background,
         // but both actors still receive the exact same BinLayout allocation.
+        // It must be painted before the items so its top edge never crosses a
+        // magnified icon and creates the illusion of icon transparency.
         this._dash.add_child(this._border);
+        this._dash.add_child(this._itemsBox);
 
         this._outer = new DashToDock(this._dash);
         this._syncColorScheme();
@@ -962,6 +965,8 @@ export class MaclikeDock {
                     slotSize,
                     activate: () => this._toggleStack(file, item),
                     iconStyle: this._settings.get_string('folder-icon-style'),
+                    cardSpread: this._settings.get_int(
+                        'folder-card-spread'),
                 });
                 this._addItem(item);
             } catch (error) {

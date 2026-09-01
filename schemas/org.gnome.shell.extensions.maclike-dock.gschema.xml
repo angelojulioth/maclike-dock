@@ -105,6 +105,11 @@
       <default>'folder'</default>
       <summary>Folder icon presentation</summary>
     </key>
+    <key name="folder-card-spread" type="i">
+      <range min="15" max="60"/>
+      <default>36</default>
+      <summary>Vertical spread of folder preview cards</summary>
+    </key>
     <key name="stack-max-items" type="i">
       <range min="4" max="20"/>
       <default>10</default>

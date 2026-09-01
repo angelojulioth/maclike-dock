@@ -189,6 +189,10 @@ export default class MaclikeDockPreferences extends ExtensionPreferences {
             iconRow.selected = settings.get_string('folder-icon-style') === 'stack' ? 1 : 0;
         });
         stacks.add(iconRow);
+        addSpin(stacks, settings, 'folder-card-spread',
+            _('Card spread'),
+            _('Maximum upward separation as a percentage of the icon size.'),
+            15, 60, 1);
         const viewModel = Gtk.StringList.new([_('Fan'), _('Grid')]);
         const viewRow = new Adw.ComboRow({
             title: _('Presentation'),

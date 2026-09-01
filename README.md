@@ -92,6 +92,7 @@ The extension archive is written to
 The card-stack icon uses GNOME thumbnails when they already exist. Local image
 files can be rendered directly; other files fall back to their MIME-type icon.
 Cards are kept axis-aligned to avoid texture aliasing during magnification.
+Their hover spread moves only upward and its distance is configurable.
 
 ## Blur engines
 
