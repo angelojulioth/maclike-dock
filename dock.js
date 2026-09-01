@@ -996,11 +996,14 @@ export class MaclikeDock {
 
     _onStageEvent(event) {
         if (event.type() === Clutter.EventType.LEAVE) {
-            const endedEdgeSession = this._edgeRevealEnteredDock;
-            this._releaseMagnification();
-            if (endedEdgeSession)
-                this._finishEdgeReveal();
-            this._evaluateVisibility();
+            let pointerX = this._pointerX;
+            let pointerY = this._pointerY;
+            try {
+                [pointerX, pointerY] = global.get_pointer();
+            } catch {
+                // The cached coordinates remain valid during Shell shutdown.
+            }
+            this._handleStageLeave(pointerX, pointerY);
             return Clutter.EVENT_PROPAGATE;
         }
         if (event.type() !== Clutter.EventType.MOTION)
@@ -1028,6 +1031,25 @@ export class MaclikeDock {
         this._evaluateVisibility();
 
         return Clutter.EVENT_PROPAGATE;
+    }
+
+    _handleStageLeave(pointerX, pointerY) {
+        this._pointerX = pointerX;
+        this._pointerY = pointerY;
+        if (this._launchPinned && this._isInsideDock(pointerX, pointerY)) {
+            // Mapping a new client briefly transfers pointer focus away from
+            // Shell even though the pointer is still over the Dock. Retaining
+            // this state avoids a one-frame magnification collapse/rebound.
+            this._pointerInside = true;
+            this._evaluateVisibility();
+            return;
+        }
+
+        const endedEdgeSession = this._edgeRevealEnteredDock;
+        this._releaseMagnification();
+        if (endedEdgeSession)
+            this._finishEdgeReveal();
+        this._evaluateVisibility();
     }
 
     _isInsideDock(x, y) {

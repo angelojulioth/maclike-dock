@@ -296,10 +296,6 @@ class FolderDockItem extends DockItem {
             [0.04, 0.015], [0.08, 0.012],
             [0.10, 0.008], [0.07, 0.0],
         ];
-        const spreadLayout = [
-            [0.00, 0.050], [0.035, 0.032],
-            [0.075, 0.016], [0.12, 0.0],
-        ];
         const previews = files.slice(0, 4).reverse();
         const cards = [];
         for (let index = 0; index < previews.length; index++) {
@@ -341,7 +337,6 @@ class FolderDockItem extends DockItem {
         }
         stack._previewCards = cards;
         stack._compactLayout = compactLayout;
-        stack._spreadLayout = spreadLayout;
         stack._previewSize = size;
         return stack;
     }
@@ -351,18 +346,28 @@ class FolderDockItem extends DockItem {
         if (!stack || stack._previewCards.length < 2)
             return;
 
-        const layout = spread ? stack._spreadLayout : stack._compactLayout;
-        const duration = spread ? 180 : 220;
+        // These are paint-only transforms. Unlike animating x/y inside a
+        // FixedLayout, translations never invalidate the stack's preferred
+        // size or the Dock allocation while the cards fan out.
+        const offsets = {
+            2: [[-0.055, 0.025], [0.085, -0.008]],
+            3: [[-0.060, 0.040], [0.015, 0.015], [0.100, -0.008]],
+            4: [
+                [-0.060, 0.045], [-0.025, 0.027],
+                [0.030, 0.010], [0.105, -0.008],
+            ],
+        }[stack._previewCards.length];
+        const duration = spread ? 200 : 240;
         const mode = spread
             ? Clutter.AnimationMode.EASE_OUT_CUBIC
             : Clutter.AnimationMode.EASE_OUT_QUAD;
         for (let index = 0; index < stack._previewCards.length; index++) {
             const card = stack._previewCards[index];
-            const [x, y] = layout[index];
+            const [x, y] = spread ? offsets[index] : [0, 0];
             card.remove_all_transitions();
             card.ease({
-                x: Math.round(stack._previewSize * x),
-                y: Math.round(stack._previewSize * y),
+                translation_x: Math.round(stack._previewSize * x),
+                translation_y: Math.round(stack._previewSize * y),
                 duration,
                 mode,
             });
