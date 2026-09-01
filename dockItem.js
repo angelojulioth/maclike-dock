@@ -18,6 +18,7 @@ class DockItem extends St.Button {
             reactive: true,
             can_focus: true,
             track_hover: true,
+            opacity: 255,
             width: slotSize,
             height: iconSize + 12,
             accessible_name: label,
@@ -35,11 +36,12 @@ class DockItem extends St.Button {
 
         this._root = new St.Widget({
             layout_manager: new Clutter.FixedLayout(),
+            opacity: 255,
             width: slotSize,
             height: iconSize + 12,
         });
         this._iconActor = icon;
-        this._iconActor.opacity = 255;
+        this._iconActor.add_style_class_name?.('maclike-dock-icon');
         if ('icon_size' in icon)
             icon.icon_size = renderSize;
         icon.set_size(renderSize, renderSize);
@@ -49,6 +51,11 @@ class DockItem extends St.Button {
             iconSize - renderSize);
         this._root.add_child(icon);
         this.set_child(this._root);
+        this._forceFullOpacity();
+        this._forceIconTreeOpacity();
+        this._opacitySignals = [this, this._root, this._iconActor].map(actor =>
+            [actor, actor.connect('notify::opacity', () =>
+                this._forceFullOpacity())]);
         this.applyMagnification(1, 0);
 
         this.connect('clicked', (_actor, button) => {
@@ -63,13 +70,32 @@ class DockItem extends St.Button {
         if (!Number.isFinite(translationX))
             translationX = 0;
         this.currentScale = scale;
-        this._iconActor.opacity = 255;
+        this._forceFullOpacity();
         const renderScale = this._iconSize * scale / this._renderSize;
         if (!Number.isFinite(renderScale) || renderScale <= 0)
             this._iconActor.set_scale(1, 1);
         else
             this._iconActor.set_scale(renderScale, renderScale);
         this.translation_x = Math.round(translationX);
+    }
+
+    _forceFullOpacity() {
+        for (const actor of [this, this._root, this._iconActor]) {
+            if (actor && actor.opacity !== 255)
+                actor.opacity = 255;
+        }
+    }
+
+    _forceIconTreeOpacity() {
+        const visit = actor => {
+            if (!actor)
+                return;
+            if (actor.opacity !== 255)
+                actor.opacity = 255;
+            for (const child of actor.get_children?.() ?? [])
+                visit(child);
+        };
+        visit(this._iconActor);
     }
 
     visualCenterX() {
@@ -91,6 +117,14 @@ class DockItem extends St.Button {
     }
 
     cleanup() {
+        for (const [actor, id] of this._opacitySignals ?? []) {
+            try {
+                actor.disconnect(id);
+            } catch {
+                // A composed icon may already have disposed a child actor.
+            }
+        }
+        this._opacitySignals = [];
         this._menuChanged = null;
     }
 });
@@ -350,11 +384,11 @@ class FolderDockItem extends DockItem {
         // FixedLayout, translations never invalidate the stack's preferred
         // size or the Dock allocation while the cards fan out.
         const offsets = {
-            2: [[-0.055, 0.025], [0.085, -0.008]],
-            3: [[-0.060, 0.040], [0.015, 0.015], [0.100, -0.008]],
+            2: [[-0.025, -0.120], [0.035, -0.020]],
+            3: [[-0.035, -0.190], [0.000, -0.105], [0.040, -0.020]],
             4: [
-                [-0.060, 0.045], [-0.025, 0.027],
-                [0.030, 0.010], [0.105, -0.008],
+                [-0.045, -0.250], [-0.015, -0.170],
+                [0.020, -0.090], [0.055, -0.015],
             ],
         }[stack._previewCards.length];
         const duration = spread ? 200 : 240;
@@ -372,6 +406,8 @@ class FolderDockItem extends DockItem {
                 mode,
             });
         }
+        this._forceFullOpacity();
+        this._forceIconTreeOpacity();
     }
 
     cleanup() {
