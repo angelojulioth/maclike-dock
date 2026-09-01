@@ -263,6 +263,11 @@ class FolderDockItem extends DockItem {
         super._init({label, icon, iconSize, renderSize, slotSize, activate});
         this.add_style_class_name('maclike-dock-folder-item');
         this._folderIconStyle = iconStyle;
+        this._cardStack = iconStyle === 'stack' ? icon : null;
+        this._cardHoverSignal = this._cardStack
+            ? this.connect('notify::hover', () =>
+                this._setCardSpread(this.hover))
+            : 0;
     }
 
     _createRecentFilesStack(file, size) {
@@ -287,13 +292,18 @@ class FolderDockItem extends DockItem {
         });
         const cardWidth = Math.round(size * 0.86);
         const cardHeight = Math.round(size * 0.98);
-        const layouts = [
+        const compactLayout = [
             [0.04, 0.015], [0.08, 0.012],
             [0.10, 0.008], [0.07, 0.0],
         ];
+        const spreadLayout = [
+            [0.00, 0.050], [0.035, 0.032],
+            [0.075, 0.016], [0.12, 0.0],
+        ];
         const previews = files.slice(0, 4).reverse();
+        const cards = [];
         for (let index = 0; index < previews.length; index++) {
-            const [x, y] = layouts[index];
+            const [x, y] = compactLayout[index];
             const entry = previews[index];
             const thumbnailPath = entry.info.get_attribute_boolean(
                 'thumbnail::is-valid')
@@ -323,11 +333,48 @@ class FolderDockItem extends DockItem {
             card.set_position(Math.round(size * x),
                 Math.round(size * y));
             stack.add_child(card);
+            cards.push(card);
         }
         if (files.length === 0) {
             const fallback = new St.Icon({icon_name: 'folder-symbolic', icon_size: size});
             stack.add_child(fallback);
         }
+        stack._previewCards = cards;
+        stack._compactLayout = compactLayout;
+        stack._spreadLayout = spreadLayout;
+        stack._previewSize = size;
         return stack;
+    }
+
+    _setCardSpread(spread) {
+        const stack = this._cardStack;
+        if (!stack || stack._previewCards.length < 2)
+            return;
+
+        const layout = spread ? stack._spreadLayout : stack._compactLayout;
+        const duration = spread ? 180 : 220;
+        const mode = spread
+            ? Clutter.AnimationMode.EASE_OUT_CUBIC
+            : Clutter.AnimationMode.EASE_OUT_QUAD;
+        for (let index = 0; index < stack._previewCards.length; index++) {
+            const card = stack._previewCards[index];
+            const [x, y] = layout[index];
+            card.remove_all_transitions();
+            card.ease({
+                x: Math.round(stack._previewSize * x),
+                y: Math.round(stack._previewSize * y),
+                duration,
+                mode,
+            });
+        }
+    }
+
+    cleanup() {
+        if (this._cardHoverSignal) {
+            this.disconnect(this._cardHoverSignal);
+            this._cardHoverSignal = 0;
+        }
+        this._setCardSpread(false);
+        super.cleanup();
     }
 });
