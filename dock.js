@@ -771,20 +771,26 @@ export class MaclikeDock {
     _syncDashBottomAnchor() {
         if (!this._outer || !this._dash)
             return;
-        const parentHeight = this._dash.get_parent()?.height ??
-            this._outer.height;
+        // The intermediate BinLayout can briefly report the child's natural
+        // height while it is processing a descendant relayout. The outer
+        // actor has an explicit, monitor-derived height and is therefore the
+        // only stable reference for the visible bottom edge.
+        const containerHeight = this._outer.height;
         const allocation = this._dash.get_allocation_box();
         const dashY = allocation.y1;
         const dashHeight = allocation.y2 - allocation.y1;
-        if (parentHeight <= 0 || dashHeight <= 0 ||
+        if (containerHeight <= 0 || dashHeight <= 0 ||
             !Number.isFinite(dashY) || !Number.isFinite(dashHeight))
             return;
         // Some Shell themes centre #dash inside a Dash-to-Dock container,
         // then switch it to bottom alignment after the first hover. The
         // allocation box excludes our previous transform, so recomputing from
         // it cannot apply the startup correction twice.
-        this._dash.translation_y = Math.round(
-            parentHeight - dashY - dashHeight);
+        const maxCorrection = Math.max(0, containerHeight - dashHeight);
+        const correction = Math.round(Math.clamp(
+            containerHeight - dashY - dashHeight, 0, maxCorrection));
+        if (this._dash.translation_y !== correction)
+            this._dash.translation_y = correction;
     }
 
     _syncEdgeTrigger() {
