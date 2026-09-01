@@ -11,10 +11,12 @@ icons with macOS artwork.
 
 - Distance-based magnification with high-resolution icon rendering
 - Automatic light and dark glass styles
+- Automatic or explicitly light/dark glass tint
 - Native dynamic blur, optional Blur My Shell integration, or no blur
 - Fan and grid views for local folders
 - Optional four-file thumbnail stack for folder icons
 - One running indicator per window, with a configurable visual limit
+- Optional GNOME accent color for running indicators
 - Native GNOME application menus plus a Force Quit action
 - Auto-hide and dodge-windows modes with edge reveal
 - Optional reserved space for maximized windows
@@ -32,6 +34,29 @@ the preferences window.
 
 Other permanent dock extensions should be disabled to avoid duplicate struts,
 edge triggers and overview behavior.
+
+### Rounded blur library on Fedora 44
+
+These are the commands used to install `gnome-rounded-blur` for Blur My Shell:
+
+```bash
+sudo dnf install -y mutter-devel gobject-introspection-devel
+git clone https://github.com/kancko/gnome-rounded-blur.git
+cd gnome-rounded-blur
+env PATH=/usr/bin:/bin meson setup build --prefix=/usr -Dc_link_args='-Wl,-rpath,/usr/lib64/mutter-18'
+env PATH=/usr/bin:/bin meson compile -C build
+sudo env PATH=/usr/bin:/bin meson install -C build
+sudo ldconfig
+```
+
+The first command installs the GNOME development headers. The explicit `PATH`
+avoids mixing a Nix toolchain with Fedora libraries, `--prefix=/usr` puts the
+typelib on GJS's search path, and `ldconfig` refreshes the library cache.
+Verify it with:
+
+```bash
+gjs -c 'const Blur = imports.gi.Blur; print(Blur.BlurEffect);'
+```
 
 ## Install from a release
 
@@ -72,8 +97,8 @@ Cards are kept axis-aligned to avoid texture aliasing during magnification.
 
 The native engine uses a separate `Shell.BlurMode.BACKGROUND` surface and a
 rounded shader mask. Blur My Shell mode uses its managed Dash to Dock surface.
-When that mode is active, Maclike Dock's own fill is transparent, so there is
-no second tinted container over the blur.
+The selected glass tint is painted over either blur engine. Automatic tint
+tracks GNOME's current color scheme; light and dark can also be forced.
 
 ## Translations
 

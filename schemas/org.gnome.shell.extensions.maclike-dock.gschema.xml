@@ -42,6 +42,19 @@
       <default>true</default>
       <summary>Show the container border</summary>
     </key>
+    <key name="tint-mode" type="s">
+      <choices>
+        <choice value="auto"/>
+        <choice value="light"/>
+        <choice value="dark"/>
+      </choices>
+      <default>'auto'</default>
+      <summary>Dock glass tint mode</summary>
+    </key>
+    <key name="use-accent-color-indicators" type="b">
+      <default>false</default>
+      <summary>Use the GNOME accent color for running indicators</summary>
+    </key>
     <key name="blur-engine" type="s">
       <choices><choice value="native"/><choice value="bms"/><choice value="off"/></choices>
       <default>'native'</default>

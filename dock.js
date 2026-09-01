@@ -156,6 +156,7 @@ export class MaclikeDock {
 
         this._outer = new DashToDock(this._dash);
         this._syncColorScheme();
+        this._syncIndicatorAccent();
         Main.layoutManager.addChrome(this._outer, {
             affectsStruts: false,
             trackFullscreen: true,
@@ -221,6 +222,8 @@ export class MaclikeDock {
             this._syncColorScheme();
             this._syncBorder();
         });
+        this._connect(this._interfaceSettings, 'changed::accent-color', () =>
+            this._syncIndicatorAccent());
         if (Main.extensionManager) {
             this._connect(Main.extensionManager, 'extension-state-changed',
                 (_manager, extension) => {
@@ -249,6 +252,12 @@ export class MaclikeDock {
                 this._syncOverviewDash();
             if (key === 'border-enabled')
                 this._syncBorder();
+            if (key === 'tint-mode') {
+                this._syncColorScheme();
+                this._syncBorder();
+            }
+            if (key === 'use-accent-color-indicators')
+                this._syncIndicatorAccent();
             if (['blur-engine', 'blur-sigma', 'blur-brightness'].includes(key))
                 this._refreshDynamicDockBlur();
             if (key === 'reserve-space-for-maximized') {
@@ -325,13 +334,37 @@ export class MaclikeDock {
     _syncColorScheme() {
         if (!this._outer || !this._interfaceSettings)
             return;
-        const dark = this._interfaceSettings.get_string('color-scheme') ===
-            'prefer-dark';
+        let tintMode = 'auto';
+        try {
+            tintMode = this._settings.get_string('tint-mode');
+        } catch (error) {
+            // Older installed schemas fall back to the synchronized mode.
+        }
+        const dark = tintMode === 'dark' || (tintMode === 'auto' &&
+            this._interfaceSettings.get_string('color-scheme') ===
+            'prefer-dark');
         this._darkTheme = dark;
         this._outer.remove_style_class_name('maclike-dark');
         this._outer.remove_style_class_name('maclike-light');
         this._outer.add_style_class_name(dark
             ? 'maclike-dark' : 'maclike-light');
+    }
+
+    _syncIndicatorAccent() {
+        if (!this._outer)
+            return;
+        let enabled = false;
+        try {
+            enabled = this._settings.get_boolean(
+                'use-accent-color-indicators');
+        } catch (error) {
+            // Keep the neutral indicator while upgrading an older schema.
+        }
+        // Re-adding the class also invalidates the style after GNOME changes
+        // -st-accent-color at runtime.
+        this._outer.remove_style_class_name('maclike-accent-indicators');
+        if (enabled)
+            this._outer.add_style_class_name('maclike-accent-indicators');
     }
 
     _getBmsDockRadius() {

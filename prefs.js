@@ -68,6 +68,9 @@ export default class MaclikeDockPreferences extends ExtensionPreferences {
         addSpin(appearance, settings, 'indicator-max-dots',
             _('Indicators per application'), _('Dots below the icon represent open windows; this limit prevents clutter.'),
             1, 5, 1);
+        addSwitch(appearance, settings, 'use-accent-color-indicators',
+            _('Use system accent for indicators'),
+            _('Color active application indicators with the GNOME accent color.'));
         addSwitch(appearance, settings, 'hide-in-overview',
             _('Hide this Dock in Activities'),
             _('Hide Maclike Dock while the overview is open.'));
@@ -138,6 +141,26 @@ export default class MaclikeDockPreferences extends ExtensionPreferences {
                 blurValues.indexOf(settings.get_string('blur-engine')));
         });
         integration.add(blurRow);
+        const tintModel = Gtk.StringList.new([
+            _('Automatic (follow GNOME)'),
+            _('Light'),
+            _('Dark'),
+        ]);
+        const tintValues = ['auto', 'light', 'dark'];
+        const tintRow = new Adw.ComboRow({
+            title: _('Glass tint'),
+            subtitle: _('Automatic follows the current GNOME light or dark appearance.'),
+            model: tintModel,
+            selected: Math.max(0,
+                tintValues.indexOf(settings.get_string('tint-mode'))),
+        });
+        tintRow.connect('notify::selected', () => settings.set_string(
+            'tint-mode', tintValues[tintRow.selected] ?? 'auto'));
+        settings.connect('changed::tint-mode', () => {
+            tintRow.selected = Math.max(0,
+                tintValues.indexOf(settings.get_string('tint-mode')));
+        });
+        integration.add(tintRow);
         addSpin(integration, settings, 'blur-sigma',
             _('Native intensity'), _('Blur radius used by the built-in engine.'),
             5, 80, 1);
