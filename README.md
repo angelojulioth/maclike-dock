@@ -97,6 +97,8 @@ upward and its distance is configurable. Scrolling cycles through the cards
 indefinitely, raising and magnifying the active preview. The stack uses one
 shared drop shadow instead of accumulating a shadow on every card. The active
 card magnification factor is configurable from 1.00x to 1.50x.
+Once scrolling begins, the folder item is painted above every neighbouring Dock
+icon and its tooltip stays hidden until the card stack collapses.
 
 ## Blur engines
 

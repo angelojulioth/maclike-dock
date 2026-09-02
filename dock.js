@@ -84,6 +84,7 @@ export class MaclikeDock {
         this._pointerX = 0;
         this._pointerY = 0;
         this._menuOpen = false;
+        this._folderCardScrollItem = null;
         this._hidden = false;
         this._inOverview = false;
         this._graceUntil = 0;
@@ -915,6 +916,7 @@ export class MaclikeDock {
         this._stack?.destroy();
         this._stack = null;
         this._menuOpen = false;
+        this._folderCardScrollItem = null;
         for (const item of this._items)
             item.cleanup();
         this._items = [];
@@ -972,6 +974,8 @@ export class MaclikeDock {
                     cardCount: this._settings.get_int('folder-card-count'),
                     activeCardScale: this._settings.get_double(
                         'folder-card-active-scale'),
+                    cardScrollStateChanged: (active, folderItem) =>
+                        this._onFolderCardScrollChanged(active, folderItem),
                 });
                 this._addItem(item);
             } catch (error) {
@@ -1035,6 +1039,15 @@ export class MaclikeDock {
         if (open)
             this._releaseMagnification();
         this._evaluateVisibility();
+    }
+
+    _onFolderCardScrollChanged(active, item) {
+        if (active) {
+            this._folderCardScrollItem = item;
+            this._hideTooltip();
+        } else if (this._folderCardScrollItem === item) {
+            this._folderCardScrollItem = null;
+        }
     }
 
     _toggleStack(file, item) {
@@ -1404,7 +1417,8 @@ export class MaclikeDock {
     }
 
     _syncTooltip() {
-        if (!this._pointerInside || this._menuOpen || this._stack) {
+        if (!this._pointerInside || this._menuOpen || this._stack ||
+                this._folderCardScrollItem) {
             this._hideTooltip();
             return;
         }

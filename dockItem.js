@@ -291,7 +291,7 @@ export const FolderDockItem = GObject.registerClass(
 class FolderDockItem extends DockItem {
     _init({file, label, iconSize, renderSize, slotSize, activate,
             iconStyle = 'folder', cardSpread = 36, cardCount = 4,
-            activeCardScale = 1.16}) {
+            activeCardScale = 1.16, cardScrollStateChanged = null}) {
         const previewCount = Math.clamp(cardCount, 2, 10);
         const icon = iconStyle === 'stack'
             ? this._createRecentFilesStack(file, renderSize, previewCount)
@@ -311,6 +311,8 @@ class FolderDockItem extends DockItem {
         this._smoothScrollAccumulator = 0;
         this._lastCardScrollTime = 0;
         this._cardsSpread = false;
+        this._cardScrollActive = false;
+        this._cardScrollStateChanged = cardScrollStateChanged;
         this._cardHoverSignal = this._cardStack
             ? this.connect('notify::hover', () =>
                 this._setCardSpread(this.hover))
@@ -431,6 +433,17 @@ class FolderDockItem extends DockItem {
         this._applyActivePreviewCard(true);
     }
 
+    _setCardScrollActive(active) {
+        active = Boolean(active);
+        if (this._cardScrollActive === active)
+            return;
+        this._cardScrollActive = active;
+        // A positive depth raises the complete folder item without reordering
+        // BoxLayout children, so neighbouring icons never shift horizontally.
+        this.set_z_position(active ? 1000 : 0);
+        this._cardScrollStateChanged?.(active, this);
+    }
+
     _onCardScroll(event) {
         if (!this._cardsSpread ||
                 (this._cardStack?._previewCards.length ?? 0) < 2)
@@ -445,6 +458,7 @@ class FolderDockItem extends DockItem {
                 direction === Clutter.ScrollDirection.LEFT) {
             step = -1;
         } else if (direction === Clutter.ScrollDirection.SMOOTH) {
+            this._setCardScrollActive(true);
             const [, deltaY] = event.get_scroll_delta();
             this._smoothScrollAccumulator += deltaY;
             if (Math.abs(this._smoothScrollAccumulator) < 0.35)
@@ -454,6 +468,8 @@ class FolderDockItem extends DockItem {
         }
         if (step === 0)
             return Clutter.EVENT_PROPAGATE;
+
+        this._setCardScrollActive(true);
 
         const now = GLib.get_monotonic_time() / 1000;
         if (now - this._lastCardScrollTime < 70)
@@ -499,6 +515,8 @@ class FolderDockItem extends DockItem {
         const stack = this._cardStack;
         this._cardsSpread = Boolean(spread &&
             (stack?._previewCards.length ?? 0) > 1);
+        if (!this._cardsSpread)
+            this._setCardScrollActive(false);
         if (!stack || stack._previewCards.length < 2)
             return;
 
@@ -560,6 +578,7 @@ class FolderDockItem extends DockItem {
         }
         this._restorePreviewCardOrder();
         this._setCardSpread(false);
+        this._cardScrollStateChanged = null;
         super.cleanup();
     }
 });
