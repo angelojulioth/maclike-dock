@@ -1,5 +1,6 @@
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
@@ -289,7 +290,8 @@ class AppDockItem extends DockItem {
 export const FolderDockItem = GObject.registerClass(
 class FolderDockItem extends DockItem {
     _init({file, label, iconSize, renderSize, slotSize, activate,
-            iconStyle = 'folder', cardSpread = 36, cardCount = 4}) {
+            iconStyle = 'folder', cardSpread = 36, cardCount = 4,
+            activeCardScale = 1.16}) {
         const previewCount = Math.clamp(cardCount, 2, 10);
         const icon = iconStyle === 'stack'
             ? this._createRecentFilesStack(file, renderSize, previewCount)
@@ -299,11 +301,23 @@ class FolderDockItem extends DockItem {
         this.add_style_class_name('maclike-dock-folder-item');
         this._folderIconStyle = iconStyle;
         this._cardStack = iconStyle === 'stack' ? icon : null;
+        if (this._cardStack)
+            this._cardStack.remove_style_class_name('maclike-dock-icon');
         this._cardSpread = Math.clamp(cardSpread, 15, 60) / 100;
         this._cardCount = previewCount;
+        this._activeCardScale = Math.clamp(activeCardScale, 1, 1.5);
+        this._activeCardIndex = Math.max(0,
+            (this._cardStack?._previewCards.length ?? 1) - 1);
+        this._smoothScrollAccumulator = 0;
+        this._lastCardScrollTime = 0;
+        this._cardsSpread = false;
         this._cardHoverSignal = this._cardStack
             ? this.connect('notify::hover', () =>
                 this._setCardSpread(this.hover))
+            : 0;
+        this._cardScrollSignal = this._cardStack
+            ? this.connect('scroll-event', (_actor, event) =>
+                this._onCardScroll(event))
             : 0;
     }
 
@@ -338,6 +352,15 @@ class FolderDockItem extends DockItem {
                 : 0,
         ]);
         const cards = [];
+        const shadow = new St.Widget({
+            style_class: 'maclike-folder-card-stack-shadow',
+            reactive: false,
+            width: cardWidth,
+            height: cardHeight,
+        });
+        shadow.set_pivot_point(0.5, 0.8);
+        shadow.set_position(Math.round(size * 0.07), 0);
+        stack.add_child(shadow);
         for (let index = 0; index < previews.length; index++) {
             const [x, y] = compactLayout[index];
             const entry = previews[index];
@@ -355,8 +378,6 @@ class FolderDockItem extends DockItem {
                     : entry.info.get_icon();
             const card = new St.Bin({
                 style_class: 'maclike-folder-card',
-                reactive: true,
-                track_hover: true,
                 child: new St.Icon({
                     gicon: previewIcon,
                     icon_size: cardWidth - 4,
@@ -380,23 +401,15 @@ class FolderDockItem extends DockItem {
         stack._previewCards = cards;
         stack._compactLayout = compactLayout;
         stack._previewSize = size;
-        stack._cardHoverSignals = cards.map(card => [
-            card,
-            card.connect('notify::hover', () => {
-                if (card.hover)
-                    this._raisePreviewCard(card);
-                else if (stack._hoveredCard === card)
-                    this._restorePreviewCardOrder();
-            }),
-        ]);
+        stack._shadow = shadow;
         return stack;
     }
 
-    _raisePreviewCard(card) {
+    _raiseActivePreviewCard() {
         const stack = this._cardStack;
-        if (!stack || !stack._previewCards.includes(card))
+        const card = stack?._previewCards[this._activeCardIndex];
+        if (!stack || !card)
             return;
-        stack._hoveredCard = card;
         stack.set_child_above_sibling(card, null);
     }
 
@@ -406,13 +419,90 @@ class FolderDockItem extends DockItem {
             return;
         for (const card of stack._previewCards)
             stack.set_child_above_sibling(card, null);
-        stack._hoveredCard = null;
+    }
+
+    _cyclePreviewCard(step) {
+        const stack = this._cardStack;
+        const count = stack?._previewCards.length ?? 0;
+        if (count < 2)
+            return;
+        this._activeCardIndex =
+            (this._activeCardIndex + step % count + count) % count;
+        this._applyActivePreviewCard(true);
+    }
+
+    _onCardScroll(event) {
+        if (!this._cardsSpread ||
+                (this._cardStack?._previewCards.length ?? 0) < 2)
+            return Clutter.EVENT_PROPAGATE;
+
+        const direction = event.get_scroll_direction();
+        let step = 0;
+        if (direction === Clutter.ScrollDirection.UP ||
+                direction === Clutter.ScrollDirection.RIGHT) {
+            step = 1;
+        } else if (direction === Clutter.ScrollDirection.DOWN ||
+                direction === Clutter.ScrollDirection.LEFT) {
+            step = -1;
+        } else if (direction === Clutter.ScrollDirection.SMOOTH) {
+            const [, deltaY] = event.get_scroll_delta();
+            this._smoothScrollAccumulator += deltaY;
+            if (Math.abs(this._smoothScrollAccumulator) < 0.35)
+                return Clutter.EVENT_STOP;
+            step = this._smoothScrollAccumulator > 0 ? -1 : 1;
+            this._smoothScrollAccumulator = 0;
+        }
+        if (step === 0)
+            return Clutter.EVENT_PROPAGATE;
+
+        const now = GLib.get_monotonic_time() / 1000;
+        if (now - this._lastCardScrollTime < 70)
+            return Clutter.EVENT_STOP;
+        this._lastCardScrollTime = now;
+        this._cyclePreviewCard(step);
+        return Clutter.EVENT_STOP;
+    }
+
+    _applyActivePreviewCard(animate) {
+        const stack = this._cardStack;
+        if (!stack)
+            return;
+        const duration = animate ? 160 : 0;
+        for (let index = 0; index < stack._previewCards.length; index++) {
+            const active = this._cardsSpread &&
+                index === this._activeCardIndex;
+            const scale = active ? this._activeCardScale : 1;
+            stack._previewCards[index].ease({
+                scale_x: scale,
+                scale_y: scale,
+                duration,
+                mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+            });
+        }
+        this._restorePreviewCardOrder();
+        if (this._cardsSpread)
+            this._raiseActivePreviewCard();
+
+        const activeCard = stack._previewCards[this._activeCardIndex];
+        stack._shadow?.ease({
+            translation_x: 0,
+            translation_y: this._cardsSpread
+                ? activeCard?.translation_y ?? 0 : 0,
+            scale_x: this._cardsSpread ? this._activeCardScale : 1,
+            scale_y: this._cardsSpread ? this._activeCardScale : 1,
+            duration,
+            mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+        });
     }
 
     _setCardSpread(spread) {
         const stack = this._cardStack;
+        this._cardsSpread = Boolean(spread &&
+            (stack?._previewCards.length ?? 0) > 1);
         if (!stack || stack._previewCards.length < 2)
             return;
+
+        spread = this._cardsSpread;
 
         // These are paint-only transforms. Unlike animating x/y inside a
         // FixedLayout, translations never invalidate the stack's preferred
@@ -432,10 +522,29 @@ class FolderDockItem extends DockItem {
             card.ease({
                 translation_x: 0,
                 translation_y: -Math.round(lift),
+                scale_x: spread && index === this._activeCardIndex
+                    ? this._activeCardScale : 1,
+                scale_y: spread && index === this._activeCardIndex
+                    ? this._activeCardScale : 1,
                 duration,
                 mode,
             });
         }
+        this._restorePreviewCardOrder();
+        if (spread)
+            this._raiseActivePreviewCard();
+        const activeLift = spread && cardCount > 1
+            ? maxLift * (cardCount - 1 - this._activeCardIndex) /
+                (cardCount - 1)
+            : 0;
+        stack._shadow?.ease({
+            translation_x: 0,
+            translation_y: -Math.round(activeLift),
+            scale_x: spread ? this._activeCardScale : 1,
+            scale_y: spread ? this._activeCardScale : 1,
+            duration,
+            mode,
+        });
         this._forceFullOpacity();
         this._forceIconTreeOpacity();
     }
@@ -445,16 +554,10 @@ class FolderDockItem extends DockItem {
             this.disconnect(this._cardHoverSignal);
             this._cardHoverSignal = 0;
         }
-        for (const [card, id] of
-            this._cardStack?._cardHoverSignals ?? []) {
-            try {
-                card.disconnect(id);
-            } catch {
-                // The preview may already have been disposed during rebuild.
-            }
+        if (this._cardScrollSignal) {
+            this.disconnect(this._cardScrollSignal);
+            this._cardScrollSignal = 0;
         }
-        if (this._cardStack)
-            this._cardStack._cardHoverSignals = [];
         this._restorePreviewCardOrder();
         this._setCardSpread(false);
         super.cleanup();

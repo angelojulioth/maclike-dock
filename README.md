@@ -93,8 +93,10 @@ The card-stack icon uses GNOME thumbnails when they already exist. Local image
 files can be rendered directly; other files fall back to their MIME-type icon.
 Cards are kept axis-aligned to avoid texture aliasing during magnification.
 Between two and ten recent previews can be shown. Their hover spread moves only
-upward, its distance is configurable, and the card under the pointer is raised
-above the others.
+upward and its distance is configurable. Scrolling cycles through the cards
+indefinitely, raising and magnifying the active preview. The stack uses one
+shared drop shadow instead of accumulating a shadow on every card. The active
+card magnification factor is configurable from 1.00x to 1.50x.
 
 ## Blur engines
 

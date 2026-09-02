@@ -29,6 +29,7 @@ const REBUILD_KEYS = new Set([
     'folder-icon-style',
     'folder-card-spread',
     'folder-card-count',
+    'folder-card-active-scale',
     'indicator-max-dots',
 ]);
 
@@ -969,6 +970,8 @@ export class MaclikeDock {
                     cardSpread: this._settings.get_int(
                         'folder-card-spread'),
                     cardCount: this._settings.get_int('folder-card-count'),
+                    activeCardScale: this._settings.get_double(
+                        'folder-card-active-scale'),
                 });
                 this._addItem(item);
             } catch (error) {

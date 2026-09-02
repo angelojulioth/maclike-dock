@@ -197,6 +197,10 @@ export default class MaclikeDockPreferences extends ExtensionPreferences {
             _('Card spread'),
             _('Maximum upward separation as a percentage of the icon size.'),
             15, 60, 1);
+        addSpin(stacks, settings, 'folder-card-active-scale',
+            _('Active card scale'),
+            _('Magnification factor for the card selected with scroll.'),
+            1, 1.5, 0.02, 2);
         const viewModel = Gtk.StringList.new([_('Fan'), _('Grid')]);
         const viewRow = new Adw.ComboRow({
             title: _('Presentation'),
