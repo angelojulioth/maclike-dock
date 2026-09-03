@@ -438,10 +438,18 @@ class FolderDockItem extends DockItem {
         if (this._cardScrollActive === active)
             return;
         this._cardScrollActive = active;
-        // A positive depth raises the complete folder item without reordering
-        // BoxLayout children, so neighbouring icons never shift horizontally.
-        this.set_z_position(active ? 1000 : 0);
+        this._syncCardDepth();
         this._cardScrollStateChanged?.(active, this);
+    }
+
+    _syncCardDepth() {
+        // Depth raises the complete folder item without reordering BoxLayout
+        // children, so overlapping previews paint correctly without shifting
+        // neighbouring icons. Keep the depth delta tiny because Clutter also
+        // interprets z-position as 3D distance and applies perspective.
+        this.set_z_position(this._cardScrollActive
+            ? 0.002
+            : this._cardsSpread ? 0.001 : 0);
     }
 
     _onCardScroll(event) {
@@ -517,6 +525,7 @@ class FolderDockItem extends DockItem {
             (stack?._previewCards.length ?? 0) > 1);
         if (!this._cardsSpread)
             this._setCardScrollActive(false);
+        this._syncCardDepth();
         if (!stack || stack._previewCards.length < 2)
             return;
 
