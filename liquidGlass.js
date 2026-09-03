@@ -3,9 +3,17 @@ import GObject from 'gi://GObject';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 
-export const LiquidGlassEffect = GObject.registerClass(
-class LiquidGlassEffect extends Clutter.ShaderEffect {
-    _init({radius = 20, scale = 1, refraction = 0.35, dispersion = 0.025, specular = 0.65, darkTheme = false} = {}) {
+export const LiquidGlassEffect = GObject.registerClass({
+    GTypeName: 'MaclikeDockLiquidGlassEffect',
+}, class LiquidGlassEffect extends Clutter.ShaderEffect {
+    _init({
+        radius = 20,
+        scale = 1,
+        refraction = 0.35,
+        dispersion = 0.025,
+        specular = 0.65,
+        darkTheme = false,
+    } = {}) {
         super._init();
         this._radius = radius;
         this._scale = scale;
@@ -13,11 +21,11 @@ class LiquidGlassEffect extends Clutter.ShaderEffect {
         this._dispersion = dispersion;
         this._specular = specular;
         this._darkTheme = darkTheme;
-        this._sizeSignal = 0;
+        this._signals = [];
 
         this.set_shader_source(`
             uniform sampler2D tex;
-            uniform float radius;
+            uniform float corner_radius;
             uniform float width;
             uniform float height;
             uniform float scale;
@@ -26,131 +34,231 @@ class LiquidGlassEffect extends Clutter.ShaderEffect {
             uniform float specular_intensity;
             uniform float is_dark;
 
-            // Analytical signed distance to rounded box perimeter (positive inside, negative outside)
-            float getDist(vec2 p, float r, vec2 size) {
-                vec2 q = min(p, size - p);
-                if (q.x < r && q.y < r) {
-                    return r - length(vec2(r) - q);
+            // Signed Distance Field (SDF) function for a rounded rectangle.
+            // Returns negative values inside the shape, positive outside, and 0 on the exact edge.
+            float sdRoundRect(vec2 p, vec2 b, float r) {
+                vec2 d = abs(p) - b + vec2(r);
+                return min(max(d.x, d.y), 0.0) + length(max(d, 0.0)) - r;
+            }
+
+            // Normalizes the depth value based on the edge curvature.
+            float normalizedDepth(float d, float r) {
+                float maxDepth = max(r, 1.0);
+                float interiorDepth = max(-d, 0.0);
+                return clamp(interiorDepth / maxDepth, 0.0, 1.0);
+            }
+
+            // Calculates the surface height profile using a superellipse formula.
+            float profileHeight(float t, float zScale, float n) {
+                float invT = clamp(1.0 - t, 0.0, 1.0);
+                float inner = max(1.0 - pow(invT, n), 0.0);
+                return pow(inner, 1.0 / n) * zScale;
+            }
+
+            // Computes the absolute height at a specific 2D coordinate with smooth edge boundary.
+            float getHeight(vec2 p, vec2 b, float r, float zScale, float n, float smoothZone) {
+                float d = sdRoundRect(p, b, r);
+                if (d > smoothZone)
+                    return 0.0;
+                float t = normalizedDepth(d, r);
+                float h = profileHeight(t, zScale, n);
+                float fade = 1.0 - smoothstep(-smoothZone, smoothZone, d);
+                return h * fade;
+            }
+
+            // Estimates the height gradient (slope) by sampling neighboring pixels.
+            vec2 heightGradient(vec2 p, vec2 b, float r, float zScale, float n, float smoothZone, vec2 resolution) {
+                float e = clamp(min(resolution.x, resolution.y) / 560.0, 0.5, 1.25);
+                float hR = getHeight(p + vec2(e, 0.0), b, r, zScale, n, smoothZone);
+                float hL = getHeight(p - vec2(e, 0.0), b, r, zScale, n, smoothZone);
+                float hB = getHeight(p + vec2(0.0, e), b, r, zScale, n, smoothZone);
+                float hT = getHeight(p - vec2(0.0, e), b, r, zScale, n, smoothZone);
+                return vec2((hR - hL) / (2.0 * e), (hB - hT) / (2.0 * e));
+            }
+
+            // Converts the 2D gradient into a 3D normal vector.
+            vec3 getNormal(vec2 gradH) {
+                return normalize(vec3(-gradH.x, -gradH.y, 1.0));
+            }
+
+            // Calculates the UV coordinate displacement caused by light refraction (Snell's Law).
+            vec2 getDisplacement(float d, vec3 normal, vec2 resolution, float iorVal, float dispScale) {
+                if (d > 0.0)
+                    return vec2(0.0);
+
+                vec3 viewDir = vec3(0.0, 0.0, -1.0);
+                float eta = 1.0 / max(iorVal, 1.001);
+                vec3 refractedRay = refract(viewDir, normal, eta);
+
+                if (length(refractedRay) < 0.0001)
+                    return vec2(0.0);
+
+                float minRes = max(min(resolution.x, resolution.y), 1.0);
+                float thicknessNorm = dispScale / minRes;
+                float safe_z = max(-refractedRay.z, 0.15);
+                vec2 displacement = (refractedRay.xy / safe_z) * thicknessNorm;
+                float max_disp = 0.25;
+                if (length(displacement) > max_disp) {
+                    displacement = normalize(displacement) * max_disp;
                 }
-                return min(q.x, q.y);
+                return displacement;
             }
 
             void main(void) {
                 vec2 uv = cogl_tex_coord_in[0].xy;
                 vec2 size = vec2(width, height);
-                vec2 p = uv * size;
+                vec2 pixel_coord = uv * size;
+                vec2 center = size * 0.5;
+                vec2 local_pos = pixel_coord - center;
 
-                // Clamped corner radius
-                float r = min(radius, min(width * 0.5, height * 0.5));
-                float distToEdge = getDist(p, r, size);
+                float edgeFeather = max(1.0, 0.85 * scale);
+                vec2 box_size = max(center - vec2(edgeFeather * 0.5), vec2(1.0));
+                float r = min(corner_radius, min(box_size.x, box_size.y));
 
-                // Anti-aliased boundary mask
-                float alpha = clamp(distToEdge + 0.5, 0.0, 1.0);
+                float d = sdRoundRect(local_pos, box_size, r);
+
+                // Anti-aliased geometry boundary
+                float outsideTransition = smoothstep(-edgeFeather, edgeFeather, d);
+                float alpha = 1.0 - outsideTransition;
                 if (alpha <= 0.0) {
                     cogl_color_out = vec4(0.0);
                     return;
                 }
 
-                // Meniscus rim bevel width in physical pixels
-                float bevelWidth = clamp(r * 0.80, 8.0 * scale, 24.0 * scale);
-                float t = clamp(distToEdge / bevelWidth, 0.0, 1.0);
+                // Superellipse profile height & normal
+                float zScale = 22.0 * scale;
+                float n = 3.2;
+                vec2 gradH = heightGradient(local_pos, box_size, r, zScale, n, edgeFeather, size);
+                vec3 normal = getNormal(gradH);
 
-                // Outward and inward normal from continuous central differences
-                vec2 grad = vec2(
-                    getDist(p + vec2(1.0, 0.0), r, size) - getDist(p - vec2(1.0, 0.0), r, size),
-                    getDist(p + vec2(0.0, 1.0), r, size) - getDist(p - vec2(0.0, 1.0), r, size)
+                // Snell's Law refraction
+                float iorVal = 1.48; // Physical crown glass IOR
+                float dispScale = 65.0 * scale * refraction_strength;
+                vec2 disp = getDisplacement(d, normal, size, iorVal, dispScale);
+
+                // Dampen refraction near edges to avoid stretching
+                float edgeDampen = smoothstep(0.0, edgeFeather * 2.5, -d);
+                disp *= edgeDampen;
+
+                // Chromatic dispersion
+                vec2 chromaDir = length(disp) > 0.00001 ? normalize(disp) : vec2(0.0);
+                float minRes = max(min(size.x, size.y), 1.0);
+                vec2 chromaVec = chromaDir * ((dispersion * 38.0 * scale) / minRes) * edgeDampen;
+
+                vec2 refrUv = clamp(uv + disp, vec2(0.001), vec2(0.999));
+                vec2 uvR = clamp(refrUv + chromaVec, vec2(0.001), vec2(0.999));
+                vec2 uvG = refrUv;
+                vec2 uvB = clamp(refrUv - chromaVec, vec2(0.001), vec2(0.999));
+
+                // 4-tap RGSS antialiased texture sampling
+                float edgeProximity = 1.0 - smoothstep(0.0, edgeFeather * 4.0, -d);
+                float aa_spread = mix(0.5, 1.6, edgeProximity);
+                vec2 texel = vec2(aa_spread) / size;
+                vec2 off1 = vec2( 0.375, -0.125) * texel;
+                vec2 off2 = vec2( 0.125,  0.375) * texel;
+                vec2 off3 = vec2(-0.375,  0.125) * texel;
+                vec2 off4 = vec2(-0.125, -0.375) * texel;
+
+                vec2 margin = vec2(1.2) / size;
+                #define SAFE_UV(u) clamp(u, margin, 1.0 - margin)
+
+                vec3 refrColor = vec3(
+                    (texture2D(tex, SAFE_UV(uvR + off1)).r +
+                     texture2D(tex, SAFE_UV(uvR + off2)).r +
+                     texture2D(tex, SAFE_UV(uvR + off3)).r +
+                     texture2D(tex, SAFE_UV(uvR + off4)).r) * 0.25,
+
+                    (texture2D(tex, SAFE_UV(uvG + off1)).g +
+                     texture2D(tex, SAFE_UV(uvG + off2)).g +
+                     texture2D(tex, SAFE_UV(uvG + off3)).g +
+                     texture2D(tex, SAFE_UV(uvG + off4)).g) * 0.25,
+
+                    (texture2D(tex, SAFE_UV(uvB + off1)).b +
+                     texture2D(tex, SAFE_UV(uvB + off2)).b +
+                     texture2D(tex, SAFE_UV(uvB + off3)).b +
+                     texture2D(tex, SAFE_UV(uvB + off4)).b) * 0.25
                 );
-                float gradLen = length(grad);
-                vec2 nIn = (gradLen > 0.001) ? (grad / gradLen) : vec2(0.0, 1.0);
-                vec2 nOut = -nIn;
 
-                // Meniscus curvature profile
-                float cosT = cos(t * 1.57079632679);
-                float slope = cosT * cosT;
-
-                vec3 color;
-                // Optimization: flat interior fragments only perform 1 texture lookup
-                if (t >= 0.999 || refraction_strength <= 0.001) {
-                    color = texture2D(tex, uv).rgb;
+                // Base glass color & theme tint
+                vec3 baseColor;
+                if (is_dark > 0.5) {
+                    vec3 darkTint = vec3(0.09, 0.12, 0.18);
+                    baseColor = mix(refrColor, darkTint, 0.32);
                 } else {
-                    // Refraction offset in UV space
-                    float maxRefractPx = 15.0 * scale * refraction_strength;
-                    vec2 uvOffset = (nIn * slope * maxRefractPx) / size;
-
-                    // Chromatic aberration (RGB dispersion)
-                    float disp = dispersion * 0.5;
-                    vec2 uvR = clamp(uv + uvOffset * (1.0 - disp), 0.002, 0.998);
-                    vec2 uvG = clamp(uv + uvOffset, 0.002, 0.998);
-                    vec2 uvB = clamp(uv + uvOffset * (1.0 + disp), 0.002, 0.998);
-
-                    float red   = texture2D(tex, uvR).r;
-                    float green = texture2D(tex, uvG).g;
-                    float blue  = texture2D(tex, uvB).b;
-                    color = vec3(red, green, blue);
+                    vec3 lightTint = vec3(0.96, 0.98, 1.0);
+                    baseColor = mix(refrColor, lightTint, 0.16);
+                    baseColor += vec3(0.035);
                 }
 
-                // --- Apple Liquid Glass Specular & Lighting Model ---
-                vec3 normal3D = normalize(vec3(nOut.x * slope * 0.85, nOut.y * slope * 0.85, 1.0));
+                // Inner Ambient Occlusion
+                float aoRadius = clamp(r * 0.40, 6.0 * scale, 18.0 * scale);
+                float aoMask = 1.0 - smoothstep(0.0, aoRadius, -d);
+                float aoIntensity = (is_dark > 0.5) ? 0.32 : 0.18;
+                baseColor *= (1.0 - aoMask * aoIntensity);
 
-                // Virtual key light from top-front
-                vec3 lightDir = normalize(vec3(0.0, -0.80, 0.60));
+                // Surface Lighting & Specular Highlights
+                vec3 lightDir = normalize(vec3(0.0, -0.75, 0.55));
                 vec3 viewDir = vec3(0.0, 0.0, 1.0);
                 vec3 halfVec = normalize(lightDir + viewDir);
 
-                // Specular highlight on the curved bevel
-                float NdotH = max(0.0, dot(normal3D, halfVec));
-                float specular = pow(NdotH, 26.0) * specular_intensity * slope;
+                float rimWidth = clamp(r * 0.55, 6.0 * scale, 16.0 * scale);
+                float edgeBand = (1.0 - smoothstep(0.0, rimWidth, abs(d)));
+                float rimDot = 1.0 - max(dot(normal, viewDir), 0.0);
+                float rimFresnel = pow(max(rimDot, 0.0), 1.8);
+                float lightMask = pow(max(abs(dot(normal, lightDir)), 0.0), 1.6);
+                float rimShape = mix(pow(edgeBand, 0.85), rimFresnel, 0.55) * edgeBand;
+                float finalRimLight = rimShape * lightMask * 0.75 * specular_intensity;
 
-                // Razor-thin top crest glint
-                float edgeDist = max(0.0, distToEdge);
-                float topFacing = max(0.0, -nOut.y);
-                float topCrest = smoothstep(2.5 * scale, 0.5 * scale, edgeDist) * topFacing * 0.38 * specular_intensity;
+                float NdotH = max(dot(normal, halfVec), 0.0);
+                float specularLight = pow(NdotH, 28.0) * specular_intensity;
+                specularLight *= clamp(edgeBand + 0.35, 0.0, 1.0);
 
-                // Subtle bottom bounce highlight
-                float bottomFacing = max(0.0, nOut.y);
-                float bottomRim = smoothstep(2.0 * scale, 0.5 * scale, edgeDist) * bottomFacing * 0.12 * specular_intensity;
+                float topFacing = max(0.0, -normal.y);
+                float topCrest = smoothstep(2.8 * scale, 0.6 * scale, abs(d)) * topFacing * 0.42 * specular_intensity;
 
-                // Fresnel reflection at glancing angles
-                float fresnel = pow(1.0 - normal3D.z, 2.5) * 0.24 * specular_intensity;
+                float bottomFacing = max(0.0, normal.y);
+                float bottomRim = smoothstep(2.2 * scale, 0.6 * scale, abs(d)) * bottomFacing * 0.14 * specular_intensity;
 
-                // Internal reflection band along meniscus transition
-                float innerBand = smoothstep(0.15, 0.45, t) * (1.0 - smoothstep(0.45, 0.85, t)) * 0.08;
+                float sheenFacing = max(dot(normal, lightDir), 0.0);
+                float surfaceSheen = pow(sheenFacing, 2.0) * 0.09 * specular_intensity;
+                surfaceSheen *= mix(1.0, 0.6, edgeBand);
 
-                // Tone mapping & Theme adaptivity
-                if (is_dark > 0.5) {
-                    vec3 darkTint = vec3(0.12, 0.15, 0.22);
-                    color = mix(color, darkTint, 0.28);
-                    color += vec3(specular * 0.8 + topCrest * 0.95 + bottomRim * 0.5 + fresnel * 0.75 + innerBand);
-                } else {
-                    vec3 lightTint = vec3(0.95, 0.97, 1.0);
-                    color = mix(color, lightTint, 0.15);
-                    color += vec3(0.035);
-                    color += vec3(specular + topCrest + bottomRim * 0.6 + fresnel * 0.85 + innerBand * 0.85);
+                vec3 addedLight = vec3(specularLight + finalRimLight + topCrest + bottomRim + surfaceSheen);
+                vec3 litColor = baseColor + addedLight - (baseColor * addedLight);
+
+                float maxChannel = max(litColor.r, max(litColor.g, litColor.b));
+                if (maxChannel > 1.0) {
+                    litColor /= maxChannel;
                 }
+                litColor = max(litColor, 0.0);
 
-                // Premultiplied alpha output
-                cogl_color_out = vec4(color * alpha, alpha);
+                cogl_color_out = vec4(litColor * alpha, alpha);
             }
         `);
     }
 
     vfunc_set_actor(actor) {
-        if (this._sizeSignal && this.get_actor()) {
-            this.get_actor().disconnect(this._sizeSignal);
-            this._sizeSignal = 0;
+        if (this._signals?.length && this.get_actor()) {
+            for (const id of this._signals)
+                this.get_actor().disconnect(id);
         }
+        this._signals = [];
         if (actor) {
             const sync = () => {
-                this.set_uniform_value('radius', parseFloat(this._radius));
+                const alloc = actor.get_allocation_box();
+                const w = (alloc && alloc.x2 > alloc.x1) ? (alloc.x2 - alloc.x1) : actor.width;
+                const h = (alloc && alloc.y2 > alloc.y1) ? (alloc.y2 - alloc.y1) : actor.height;
+                this.set_uniform_value('corner_radius', parseFloat(this._radius));
                 this.set_uniform_value('scale', parseFloat(this._scale));
                 this.set_uniform_value('refraction_strength', parseFloat(this._refraction));
                 this.set_uniform_value('dispersion', parseFloat(this._dispersion));
                 this.set_uniform_value('specular_intensity', parseFloat(this._specular));
                 this.set_uniform_value('is_dark', this._darkTheme ? 1.0 : 0.0);
-                this.set_uniform_value('width', Math.max(1.0, parseFloat(actor.width)));
-                this.set_uniform_value('height', Math.max(1.0, parseFloat(actor.height)));
+                this.set_uniform_value('width', Math.max(1.0, parseFloat(w)));
+                this.set_uniform_value('height', Math.max(1.0, parseFloat(h)));
             };
-            this._sizeSignal = actor.connect('notify::size', sync);
+            this._signals.push(actor.connect('notify::size', sync));
+            this._signals.push(actor.connect('notify::allocation', sync));
             sync();
         }
         super.vfunc_set_actor(actor);
@@ -158,37 +266,44 @@ class LiquidGlassEffect extends Clutter.ShaderEffect {
 
     set radius(value) {
         this._radius = value;
-        this.set_uniform_value('radius', parseFloat(value));
+        this.set_uniform_value('corner_radius', parseFloat(value));
+        this.queue_repaint();
     }
 
     set scale(value) {
         this._scale = value;
         this.set_uniform_value('scale', parseFloat(value));
+        this.queue_repaint();
     }
 
     set refraction(value) {
         this._refraction = value;
         this.set_uniform_value('refraction_strength', parseFloat(value));
+        this.queue_repaint();
     }
 
     set dispersion(value) {
         this._dispersion = value;
         this.set_uniform_value('dispersion', parseFloat(value));
+        this.queue_repaint();
     }
 
     set specular(value) {
         this._specular = value;
         this.set_uniform_value('specular_intensity', parseFloat(value));
+        this.queue_repaint();
     }
 
     set darkTheme(value) {
         this._darkTheme = Boolean(value);
         this.set_uniform_value('is_dark', this._darkTheme ? 1.0 : 0.0);
+        this.queue_repaint();
     }
 });
 
-export const LiquidGlassSurface = GObject.registerClass(
-class LiquidGlassSurface extends St.Widget {
+export const LiquidGlassSurface = GObject.registerClass({
+    GTypeName: 'MaclikeDockLiquidGlassSurface',
+}, class LiquidGlassSurface extends St.Widget {
     _init({
         sigma = 32,
         brightness = 0.72,
@@ -261,28 +376,42 @@ class LiquidGlassSurface extends St.Widget {
         specular,
         darkTheme,
     } = {}) {
-        if (sigma !== undefined)
+        if (sigma !== undefined && this.blur)
             this.blur.radius = sigma * 2 * this._scale;
-        if (brightness !== undefined)
+        if (brightness !== undefined && this.blur)
             this.blur.brightness = brightness;
-        if (radius !== undefined)
+        if (radius !== undefined && this.effect)
             this.effect.radius = radius * this._scale;
-        if (refraction !== undefined)
+        if (refraction !== undefined && this.effect)
             this.effect.refraction = refraction;
-        if (dispersion !== undefined)
+        if (dispersion !== undefined && this.effect)
             this.effect.dispersion = dispersion;
-        if (specular !== undefined)
+        if (specular !== undefined && this.effect)
             this.effect.specular = specular;
-        if (darkTheme !== undefined)
+        if (darkTheme !== undefined && this.effect)
             this.effect.darkTheme = darkTheme;
 
-        this.blur.queue_repaint();
+        this.blur?.queue_repaint();
+        this.effect?.queue_repaint();
     }
 
     updateTheme(darkTheme) {
         if (this.effect) {
             this.effect.darkTheme = darkTheme;
             this.blur?.queue_repaint();
+            this.effect?.queue_repaint();
         }
+    }
+
+    destroy() {
+        if (this.effect) {
+            this.remove_effect(this.effect);
+            this.effect = null;
+        }
+        if (this.blur) {
+            this.remove_effect(this.blur);
+            this.blur = null;
+        }
+        super.destroy();
     }
 });

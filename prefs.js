@@ -124,7 +124,7 @@ export default class MaclikeDockPreferences extends ExtensionPreferences {
             80, 500, 10);
 
         const integration = new Adw.PreferencesGroup({
-            title: _('Blur & Glass Effect'),
+            title: _('Blur &amp; Glass Effect'),
             description: _('The native and liquid glass engines capture the area behind the Dock and require no external extension.'),
         });
         page.add(integration);
@@ -165,7 +165,7 @@ export default class MaclikeDockPreferences extends ExtensionPreferences {
             _('Chromatic Dispersion'), _('Prismatic color fringing along the curved edge.'),
             0.0, 0.10, 0.005, 3);
         addSpin(liquidGroup, settings, 'liquid-specular',
-            _('Specular & Crest'), _('Intensity of the top razor glint and surface highlights.'),
+            _('Specular &amp; Crest'), _('Intensity of the top razor glint and surface highlights.'),
             0.0, 1.5, 0.05, 2);
 
         const updateLiquidVisibility = () => {

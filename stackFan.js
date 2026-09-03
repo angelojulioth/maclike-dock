@@ -235,6 +235,7 @@ export class StackPopup {
         const [anchorWidth] = this._anchorActor.get_transformed_size();
         const anchorCenter = anchorX + anchorWidth / 2;
         const screenWidth = global.stage.width;
+        const fanToLeft = anchorCenter > screenWidth / 2;
         const actions = this._actions(entries);
         const totalItems = actions.length;
 
