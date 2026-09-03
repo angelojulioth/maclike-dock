@@ -295,7 +295,8 @@ class FolderDockItem extends DockItem {
             cardLayerChanged = null}) {
         const previewCount = Math.clamp(cardCount, 2, 10);
         const icon = iconStyle === 'stack'
-            ? this._createRecentFilesStack(file, renderSize, previewCount)
+            ? this._createRecentFilesStack(
+                file, renderSize, previewCount, activeCardScale)
             : new St.Icon({gicon: file.query_info(
                 'standard::icon', Gio.FileQueryInfoFlags.NONE, null).get_icon()});
         super._init({label, icon, iconSize, renderSize, slotSize, activate});
@@ -325,7 +326,7 @@ class FolderDockItem extends DockItem {
             : 0;
     }
 
-    _createRecentFilesStack(file, size, previewCount) {
+    _createRecentFilesStack(file, size, previewCount, activeCardScale) {
         const files = [];
         const enumerator = file.enumerate_children(
             'standard::icon,standard::name,standard::content-type,' +
@@ -347,6 +348,10 @@ class FolderDockItem extends DockItem {
         });
         const cardWidth = Math.round(size * 0.86);
         const cardHeight = Math.round(size * 0.98);
+        const qualityScale = Math.clamp(activeCardScale, 1, 1.5);
+        const cardBaseScale = 1 / qualityScale;
+        const renderWidth = Math.ceil(cardWidth * qualityScale);
+        const renderHeight = Math.ceil(cardHeight * qualityScale);
         const previews = files.slice(0, previewCount).reverse();
         const compactLayout = previews.map((_entry, index) => [
             0.07,
@@ -384,17 +389,24 @@ class FolderDockItem extends DockItem {
                 style_class: 'maclike-folder-card',
                 child: new St.Icon({
                     gicon: previewIcon,
-                    icon_size: cardWidth - 4,
+                    icon_size: renderWidth - 4,
                     opacity: 255,
                 }),
-                width: cardWidth,
-                height: cardHeight,
+                width: renderWidth,
+                height: renderHeight,
             });
             card.set_pivot_point(0.5, 0.8);
             card.rotation_angle_z = 0;
             card.opacity = 255;
-            card.set_position(Math.round(size * x),
-                Math.round(size * y));
+            card.set_scale(cardBaseScale, cardBaseScale);
+            // Compensate the downscale around the pivot so the compact card
+            // keeps exactly the old visual position. At active scale 1 the
+            // pre-rendered pixels are shown natively instead of enlarged.
+            card.set_position(
+                Math.round(size * x - renderWidth * 0.5 *
+                    (1 - cardBaseScale)),
+                Math.round(size * y - renderHeight * 0.8 *
+                    (1 - cardBaseScale)));
             stack.add_child(card);
             cards.push(card);
         }
@@ -405,6 +417,11 @@ class FolderDockItem extends DockItem {
         stack._previewCards = cards;
         stack._compactLayout = compactLayout;
         stack._previewSize = size;
+        stack._cardBaseScale = cardBaseScale;
+        stack._cardRenderWidth = renderWidth;
+        stack._cardRenderHeight = renderHeight;
+        stack._cardVisualWidth = cardWidth;
+        stack._cardVisualHeight = cardHeight;
         stack._shadow = shadow;
         return stack;
     }
@@ -492,10 +509,11 @@ class FolderDockItem extends DockItem {
         if (!stack)
             return;
         const duration = animate ? 160 : 0;
+        const baseScale = stack._cardBaseScale ?? 1;
         for (let index = 0; index < stack._previewCards.length; index++) {
             const active = this._cardsSpread &&
                 index === this._activeCardIndex;
-            const scale = active ? this._activeCardScale : 1;
+            const scale = active ? 1 : baseScale;
             stack._previewCards[index].ease({
                 scale_x: scale,
                 scale_y: scale,
@@ -535,6 +553,7 @@ class FolderDockItem extends DockItem {
         // FixedLayout, translations never invalidate the stack's preferred
         // size or the Dock allocation while the cards spread upward.
         const cardCount = stack._previewCards.length;
+        const baseScale = stack._cardBaseScale ?? 1;
         const maxLift = stack._previewSize * this._cardSpread;
         const duration = spread ? 200 : 240;
         const mode = spread
@@ -550,9 +569,9 @@ class FolderDockItem extends DockItem {
                 translation_x: 0,
                 translation_y: -Math.round(lift),
                 scale_x: spread && index === this._activeCardIndex
-                    ? this._activeCardScale : 1,
+                    ? 1 : baseScale,
                 scale_y: spread && index === this._activeCardIndex
-                    ? this._activeCardScale : 1,
+                    ? 1 : baseScale,
                 duration,
                 mode,
             });
