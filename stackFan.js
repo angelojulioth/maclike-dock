@@ -256,21 +256,15 @@ export class StackPopup {
             row.set_position(Math.round(x), Math.round(y));
             row.set_size(naturalWidth, 57);
 
-            // Subtle progressive rotation along the fan arc
-            const rotFactor = Math.pow(distance / Math.max(1, totalItems), 1.25);
-            const targetRotation = (fanToLeft ? -1 : 1) * (rotFactor * 13.5);
-
             row.opacity = 0;
             row.scale_x = 0.55;
             row.scale_y = 0.55;
-            row.rotation_angle_z = 0;
             row.translation_x = Math.round(anchorCenter - (x + iconCenterOffset));
             row.translation_y = Math.round(anchorY - y);
             row.ease({
                 opacity: 255,
                 scale_x: 1,
                 scale_y: 1,
-                rotation_angle_z: targetRotation,
                 translation_x: 0,
                 translation_y: 0,
                 delay: index * 22,

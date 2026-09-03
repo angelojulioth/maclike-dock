@@ -13,7 +13,7 @@ import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js'
 import {AppDockItem, FolderDockItem, ShowAppsDockItem, TrashDockItem} from './dockItem.js';
 import {StackPopup} from './stackFan.js';
 import {NativeBlurSurface} from './nativeBlur.js';
-import {LiquidGlassSurface} from './liquidGlass.js';
+import {LiquidGlassSurface} from './liquidGlassEngine.js';
 
 const INTERACTION_GRACE = 800;
 const LAUNCH_PIN_MS = 4000;
@@ -45,7 +45,7 @@ const VISIBILITY_KEYS = new Set([
 
 // Blur My Shell discovers Dash to Dock through this exact public shape.
 // Keeping it small lets its existing Dash filter/pipeline work unmodified.
-export const DashToDock = GObject.registerClass(
+export const DashToDock = globalThis.MaclikeDockDashToDock ??= GObject.registerClass(
 class DashToDock extends St.Bin {
     _init(dash) {
         super._init({
@@ -666,6 +666,7 @@ export class MaclikeDock {
         }
         this._dockBlurStatus = 'attached-liquid-glass-surface';
         this._applyDockBackgroundStyle(radius);
+        this._border?.set_style(`border-radius: ${radius}px;`);
     }
 
     _detachLiquidBlur() {
