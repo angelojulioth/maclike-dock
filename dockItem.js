@@ -348,8 +348,12 @@ class FolderDockItem extends DockItem {
         });
         const cardWidth = Math.round(size * 0.86);
         const cardHeight = Math.round(size * 0.98);
-        const qualityScale = Math.clamp(activeCardScale, 1, 1.5);
+        const requestedActiveScale = Math.clamp(activeCardScale, 1, 1.5);
+        // Keep every preview above native display resolution, including while
+        // the Dock itself and the scroll-selected card are both magnified.
+        const qualityScale = Math.max(2, requestedActiveScale);
         const cardBaseScale = 1 / qualityScale;
+        const cardActiveRenderScale = requestedActiveScale / qualityScale;
         const renderWidth = Math.ceil(cardWidth * qualityScale);
         const renderHeight = Math.ceil(cardHeight * qualityScale);
         const previews = files.slice(0, previewCount).reverse();
@@ -380,21 +384,39 @@ class FolderDockItem extends DockItem {
             const contentType = entry.info.get_content_type() ?? '';
             const thumbnailFile = thumbnailPath
                 ? Gio.File.new_for_path(thumbnailPath) : null;
-            const previewIcon = thumbnailFile?.query_exists(null)
-                ? new Gio.FileIcon({file: thumbnailFile})
-                : contentType.startsWith('image/')
-                    ? new Gio.FileIcon({file: entry.file})
+            // Loading an image from the original file avoids enlarging the
+            // 128/256 px thumbnail that GIO may return. Other formats retain
+            // their generated document thumbnail when one exists.
+            const previewIcon = contentType.startsWith('image/')
+                ? new Gio.FileIcon({file: entry.file})
+                : thumbnailFile?.query_exists(null)
+                    ? new Gio.FileIcon({file: thumbnailFile})
                     : entry.info.get_icon();
-            const card = new St.Bin({
+            const previewSize = Math.min(renderWidth, renderHeight) - 4;
+            const previewActor = new St.Icon({
+                gicon: previewIcon,
+                icon_size: previewSize,
+                width: previewSize,
+                height: previewSize,
+                x_align: Clutter.ActorAlign.CENTER,
+                y_align: Clutter.ActorAlign.CENTER,
+                content_gravity: Clutter.ContentGravity.RESIZE_ASPECT,
+                opacity: 255,
+            });
+            previewActor.set_content_scaling_filters(
+                Clutter.ScalingFilter.TRILINEAR,
+                Clutter.ScalingFilter.TRILINEAR);
+            const card = new St.Widget({
                 style_class: 'maclike-folder-card',
-                child: new St.Icon({
-                    gicon: previewIcon,
-                    icon_size: renderWidth - 4,
-                    opacity: 255,
-                }),
+                layout_manager: new Clutter.FixedLayout(),
                 width: renderWidth,
                 height: renderHeight,
             });
+            previewActor.set_position(
+                Math.round((renderWidth - previewSize) / 2),
+                Math.round((renderHeight - previewSize) / 2));
+            card.add_child(previewActor);
+            card._previewActor = previewActor;
             card.set_pivot_point(0.5, 0.8);
             card.rotation_angle_z = 0;
             card.opacity = 255;
@@ -418,6 +440,7 @@ class FolderDockItem extends DockItem {
         stack._compactLayout = compactLayout;
         stack._previewSize = size;
         stack._cardBaseScale = cardBaseScale;
+        stack._cardActiveRenderScale = cardActiveRenderScale;
         stack._cardRenderWidth = renderWidth;
         stack._cardRenderHeight = renderHeight;
         stack._cardVisualWidth = cardWidth;
@@ -510,10 +533,11 @@ class FolderDockItem extends DockItem {
             return;
         const duration = animate ? 160 : 0;
         const baseScale = stack._cardBaseScale ?? 1;
+        const activeScale = stack._cardActiveRenderScale ?? 1;
         for (let index = 0; index < stack._previewCards.length; index++) {
             const active = this._cardsSpread &&
                 index === this._activeCardIndex;
-            const scale = active ? 1 : baseScale;
+            const scale = active ? activeScale : baseScale;
             stack._previewCards[index].ease({
                 scale_x: scale,
                 scale_y: scale,
@@ -554,6 +578,7 @@ class FolderDockItem extends DockItem {
         // size or the Dock allocation while the cards spread upward.
         const cardCount = stack._previewCards.length;
         const baseScale = stack._cardBaseScale ?? 1;
+        const activeScale = stack._cardActiveRenderScale ?? 1;
         const maxLift = stack._previewSize * this._cardSpread;
         const duration = spread ? 200 : 240;
         const mode = spread
@@ -569,9 +594,9 @@ class FolderDockItem extends DockItem {
                 translation_x: 0,
                 translation_y: -Math.round(lift),
                 scale_x: spread && index === this._activeCardIndex
-                    ? 1 : baseScale,
+                    ? activeScale : baseScale,
                 scale_y: spread && index === this._activeCardIndex
-                    ? 1 : baseScale,
+                    ? activeScale : baseScale,
                 duration,
                 mode,
             });

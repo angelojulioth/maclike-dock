@@ -98,7 +98,9 @@ indefinitely, raising and magnifying the active preview. The stack uses one
 shared drop shadow instead of accumulating a shadow on every card. The active
 card magnification factor is configurable from 1.00x to 1.50x. Preview cards
 are pre-rendered for that active size and downscaled while idle, avoiding a
-low-resolution texture upscale during scroll selection.
+low-resolution texture upscale during scroll selection. Image previews load
+from the original file, use 2x supersampling and preserve their aspect ratio;
+non-image documents use their generated thumbnail or scalable MIME icon.
 Once scrolling begins, the folder item is painted above every neighbouring Dock
 icon and its tooltip stays hidden until the pointer leaves that folder. A
 magnified folder stack is cloned into a dedicated top paint layer, so it stays
