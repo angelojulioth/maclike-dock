@@ -85,6 +85,8 @@ export class MaclikeDock {
         this._pointerY = 0;
         this._menuOpen = false;
         this._folderCardScrollItem = null;
+        this._folderLayerItem = null;
+        this._folderLayerClone = null;
         this._hidden = false;
         this._inOverview = false;
         this._graceUntil = 0;
@@ -159,6 +161,13 @@ export class MaclikeDock {
         // magnified icon and creates the illusion of icon transparency.
         this._dash.add_child(this._border);
         this._dash.add_child(this._itemsBox);
+        this._folderOverlay = new St.Widget({
+            reactive: false,
+            x_expand: true,
+            y_expand: true,
+            layout_manager: new Clutter.FixedLayout(),
+        });
+        this._dash.add_child(this._folderOverlay);
 
         this._outer = new DashToDock(this._dash);
         this._syncColorScheme();
@@ -917,6 +926,7 @@ export class MaclikeDock {
         this._stack = null;
         this._menuOpen = false;
         this._folderCardScrollItem = null;
+        this._clearFolderLayer();
         for (const item of this._items)
             item.cleanup();
         this._items = [];
@@ -976,6 +986,8 @@ export class MaclikeDock {
                         'folder-card-active-scale'),
                     cardScrollStateChanged: (active, folderItem) =>
                         this._onFolderCardScrollChanged(active, folderItem),
+                    cardLayerChanged: (active, folderItem) =>
+                        this._onFolderLayerChanged(active, folderItem),
                 });
                 this._addItem(item);
             } catch (error) {
@@ -1048,6 +1060,44 @@ export class MaclikeDock {
         } else if (this._folderCardScrollItem === item) {
             this._folderCardScrollItem = null;
         }
+    }
+
+    _onFolderLayerChanged(active, item) {
+        if (!active) {
+            if (this._folderLayerItem === item)
+                this._clearFolderLayer();
+            return;
+        }
+        if (this._folderLayerItem !== item) {
+            this._clearFolderLayer();
+            this._folderLayerItem = item;
+            this._folderLayerClone = new Clutter.Clone({
+                source: item,
+                reactive: false,
+            });
+            this._folderOverlay.add_child(this._folderLayerClone);
+        }
+        this._syncFolderLayer();
+    }
+
+    _syncFolderLayer() {
+        const item = this._folderLayerItem;
+        const clone = this._folderLayerClone;
+        if (!item || !clone || !this._dash)
+            return;
+        const [stageX, stageY] = item.get_transformed_position();
+        const [valid, localX, localY] =
+            this._dash.transform_stage_point(stageX, stageY);
+        if (!valid)
+            return;
+        clone.set_position(Math.round(localX), Math.round(localY));
+        clone.set_size(item.width, item.height);
+    }
+
+    _clearFolderLayer() {
+        this._folderLayerClone?.destroy();
+        this._folderLayerClone = null;
+        this._folderLayerItem = null;
     }
 
     _toggleStack(file, item) {
@@ -1410,6 +1460,7 @@ export class MaclikeDock {
             cursor += expansions[index];
             item.applyMagnification(item.currentScale, translation);
         });
+        this._syncFolderLayer();
 
         this._syncTooltip();
         if (!this._pointerInside && !moving)
@@ -1503,6 +1554,7 @@ export class MaclikeDock {
         this._signals = [];
         for (const item of this._items)
             item.cleanup();
+        this._clearFolderLayer();
         if (this._overviewDash && this._overviewDashState) {
             this._overviewDash.opacity = this._overviewDashState.opacity;
             this._overviewDash.reactive = this._overviewDashState.reactive;
@@ -1526,6 +1578,7 @@ export class MaclikeDock {
         this._dash = null;
         this._border = null;
         this._itemsBox = null;
+        this._folderOverlay = null;
         this._items = [];
         this._settings = null;
         this._interfaceSettings = null;

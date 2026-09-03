@@ -99,7 +99,9 @@ shared drop shadow instead of accumulating a shadow on every card. The active
 card magnification factor is configurable from 1.00x to 1.50x.
 Once scrolling begins, the folder item is painted above every neighbouring Dock
 icon and its tooltip stays hidden until the pointer leaves that folder. A
-magnified folder stack also paints above adjacent folder icons before scrolling.
+magnified folder stack is cloned into a dedicated top paint layer, so it stays
+above adjacent icons without changing BoxLayout order. Fan rows keep a stable
+size on hover.
 
 ## Blur engines
 

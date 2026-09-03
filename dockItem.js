@@ -291,7 +291,8 @@ export const FolderDockItem = GObject.registerClass(
 class FolderDockItem extends DockItem {
     _init({file, label, iconSize, renderSize, slotSize, activate,
             iconStyle = 'folder', cardSpread = 36, cardCount = 4,
-            activeCardScale = 1.16, cardScrollStateChanged = null}) {
+            activeCardScale = 1.16, cardScrollStateChanged = null,
+            cardLayerChanged = null}) {
         const previewCount = Math.clamp(cardCount, 2, 10);
         const icon = iconStyle === 'stack'
             ? this._createRecentFilesStack(file, renderSize, previewCount)
@@ -313,6 +314,7 @@ class FolderDockItem extends DockItem {
         this._cardsSpread = false;
         this._cardScrollActive = false;
         this._cardScrollStateChanged = cardScrollStateChanged;
+        this._cardLayerChanged = cardLayerChanged;
         this._cardHoverSignal = this._cardStack
             ? this.connect('notify::hover', () =>
                 this._setCardSpread(this.hover))
@@ -443,13 +445,11 @@ class FolderDockItem extends DockItem {
     }
 
     _syncCardDepth() {
-        // Depth raises the complete folder item without reordering BoxLayout
-        // children, so overlapping previews paint correctly without shifting
-        // neighbouring icons. Keep the depth delta tiny because Clutter also
-        // interprets z-position as 3D distance and applies perspective.
-        this.set_z_position(this._cardScrollActive
-            ? 0.002
-            : this._cardsSpread ? 0.001 : 0);
+        // The Dock paints an active clone in a dedicated overlay. z-position
+        // cannot be used as a CSS-like z-index because Clutter treats it as
+        // 3D depth and applies perspective to the actor.
+        this.set_z_position(0);
+        this._cardLayerChanged?.(this._cardsSpread, this);
     }
 
     _onCardScroll(event) {
@@ -588,6 +588,7 @@ class FolderDockItem extends DockItem {
         this._restorePreviewCardOrder();
         this._setCardSpread(false);
         this._cardScrollStateChanged = null;
+        this._cardLayerChanged = null;
         super.cleanup();
     }
 });

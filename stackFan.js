@@ -60,14 +60,6 @@ class FanRow extends St.Button {
         this.set_child(box);
 
         this.connect('clicked', activate);
-        this.connect('notify::hover', () => {
-            this.ease({
-                scale_x: this.hover ? 1.075 : 1,
-                scale_y: this.hover ? 1.075 : 1,
-                duration: 95,
-                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-            });
-        });
     }
 });
 
