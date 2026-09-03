@@ -25,6 +25,14 @@
       <default>true</default>
       <summary>Show running applications that are not favorites</summary>
     </key>
+    <key name="show-apps-icon" type="b">
+      <default>true</default>
+      <summary>Show GNOME applications grid icon in the Dock</summary>
+    </key>
+    <key name="show-trash" type="b">
+      <default>true</default>
+      <summary>Show Trash Bin icon in the Dock</summary>
+    </key>
     <key name="indicator-max-dots" type="i">
       <range min="1" max="5"/>
       <default>3</default>
@@ -56,9 +64,24 @@
       <summary>Use the GNOME accent color for running indicators</summary>
     </key>
     <key name="blur-engine" type="s">
-      <choices><choice value="native"/><choice value="bms"/><choice value="off"/></choices>
+      <choices><choice value="liquid"/><choice value="native"/><choice value="bms"/><choice value="off"/></choices>
       <default>'native'</default>
       <summary>Dock blur engine</summary>
+    </key>
+    <key name="liquid-refraction" type="d">
+      <range min="0.0" max="1.0"/>
+      <default>0.35</default>
+      <summary>Liquid glass physical refraction strength</summary>
+    </key>
+    <key name="liquid-dispersion" type="d">
+      <range min="0.0" max="0.10"/>
+      <default>0.025</default>
+      <summary>Liquid glass chromatic dispersion</summary>
+    </key>
+    <key name="liquid-specular" type="d">
+      <range min="0.0" max="1.5"/>
+      <default>0.65</default>
+      <summary>Liquid glass specular highlight and crest intensity</summary>
     </key>
     <key name="blur-sigma" type="i">
       <range min="5" max="80"/><default>32</default>

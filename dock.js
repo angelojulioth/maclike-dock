@@ -10,9 +10,10 @@ import * as AppFavorites from 'resource:///org/gnome/shell/ui/appFavorites.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 
-import {AppDockItem, FolderDockItem} from './dockItem.js';
+import {AppDockItem, FolderDockItem, ShowAppsDockItem, TrashDockItem} from './dockItem.js';
 import {StackPopup} from './stackFan.js';
 import {NativeBlurSurface} from './nativeBlur.js';
+import {LiquidGlassSurface} from './liquidGlass.js';
 
 const INTERACTION_GRACE = 800;
 const LAUNCH_PIN_MS = 4000;
@@ -25,6 +26,8 @@ const REBUILD_KEYS = new Set([
     'magnification',
     'magnification-radius',
     'show-running-apps',
+    'show-apps-icon',
+    'show-trash',
     'folder-paths',
     'folder-icon-style',
     'folder-card-spread',
@@ -273,7 +276,7 @@ export class MaclikeDock {
             }
             if (key === 'use-accent-color-indicators')
                 this._syncIndicatorAccent();
-            if (['blur-engine', 'blur-sigma', 'blur-brightness'].includes(key))
+            if (['blur-engine', 'blur-sigma', 'blur-brightness', 'liquid-refraction', 'liquid-dispersion', 'liquid-specular'].includes(key))
                 this._refreshDynamicDockBlur();
             if (key === 'reserve-space-for-maximized') {
                 this._syncStrut();
@@ -363,6 +366,7 @@ export class MaclikeDock {
         this._outer.remove_style_class_name('maclike-light');
         this._outer.add_style_class_name(dark
             ? 'maclike-dark' : 'maclike-light');
+        this._liquidBlurSurface?.updateTheme(dark);
     }
 
     _syncIndicatorAccent() {
@@ -408,8 +412,12 @@ export class MaclikeDock {
     _applyDockBackgroundStyle(radius) {
         if (!this._dash?._background)
             return;
-        const usesBms = this._settings?.get_string('blur-engine') === 'bms';
-        if (usesBms) {
+        const engine = this._settings?.get_string('blur-engine');
+        if (engine === 'liquid') {
+            this._dash._background.set_style(
+                `border-radius: ${radius}px; ` +
+                `background-color: transparent; box-shadow: none;`);
+        } else if (engine === 'bms') {
             const tint = this._darkTheme
                 ? 'rgba(18, 22, 29, 0.24)'
                 : 'rgba(210, 222, 239, 0.15)';
@@ -494,10 +502,23 @@ export class MaclikeDock {
 
     _refreshDynamicDockBlur() {
         const engine = this._settings.get_string('blur-engine');
+        if (engine === 'liquid') {
+            this._detachDynamicDockBlur();
+            this._hideManagedBmsDashSurface();
+            this._detachNativeBlur();
+            this._attachLiquidBlur();
+            this._outer?.add_style_class_name('maclike-liquid-glass');
+            this._syncBorder();
+            return;
+        }
+        this._outer?.remove_style_class_name('maclike-liquid-glass');
+        this._detachLiquidBlur();
+
         if (engine === 'native') {
             this._detachDynamicDockBlur();
             this._hideManagedBmsDashSurface();
             this._attachNativeBlur();
+            this._syncBorder();
             return;
         }
         this._detachNativeBlur();
@@ -621,6 +642,35 @@ export class MaclikeDock {
     _detachNativeBlur() {
         this._nativeBlurSurface?.destroy();
         this._nativeBlurSurface = null;
+    }
+
+    _attachLiquidBlur() {
+        if (!this._nativeBlurLayer)
+            return;
+        const radius = this._getBmsDockRadius();
+        const params = {
+            sigma: this._settings.get_int('blur-sigma'),
+            brightness: this._settings.get_double('blur-brightness'),
+            radius,
+            refraction: this._settings.get_double('liquid-refraction'),
+            dispersion: this._settings.get_double('liquid-dispersion'),
+            specular: this._settings.get_double('liquid-specular'),
+            darkTheme: this._darkTheme,
+        };
+        if (!this._liquidBlurSurface) {
+            this._liquidBlurSurface = new LiquidGlassSurface(params);
+            this._nativeBlurLayer.add_child(this._liquidBlurSurface);
+            this._liquidBlurSurface.initialize();
+        } else {
+            this._liquidBlurSurface.update(params);
+        }
+        this._dockBlurStatus = 'attached-liquid-glass-surface';
+        this._applyDockBackgroundStyle(radius);
+    }
+
+    _detachLiquidBlur() {
+        this._liquidBlurSurface?.destroy();
+        this._liquidBlurSurface = null;
     }
 
     _syncDynamicDockBlur() {
@@ -952,6 +1002,15 @@ export class MaclikeDock {
             apps.push(...running);
         }
 
+        if (this._settings.get_boolean('show-apps-icon')) {
+            this._addItem(new ShowAppsDockItem({
+                iconSize,
+                renderSize,
+                slotSize,
+                onActivated: () => this._onItemActivated(),
+            }));
+        }
+
         for (const app of apps) {
             this._addItem(new AppDockItem(
                 app, iconSize, renderSize, slotSize,
@@ -960,7 +1019,11 @@ export class MaclikeDock {
         }
 
         const folders = this._resolveFolderPaths();
-        if (folders.length > 0 && apps.length > 0)
+        const showTrash = this._settings.get_boolean('show-trash');
+        const showApps = this._settings.get_boolean('show-apps-icon');
+        const hasLeftSide = apps.length > 0 || showApps;
+        const hasRightSide = folders.length > 0 || showTrash;
+        if (hasLeftSide && hasRightSide)
             this._itemsBox.add_child(new St.Widget({style_class: 'maclike-dock-separator'}));
 
         for (const path of folders) {
@@ -996,6 +1059,16 @@ export class MaclikeDock {
             }
         }
 
+        if (showTrash) {
+            this._addItem(new TrashDockItem({
+                iconSize,
+                renderSize,
+                slotSize,
+                menuChanged: (open, item) => this._onMenuChanged(open, item),
+                onActivated: () => this._onItemActivated(),
+            }));
+        }
+
         this._lastSignature = this._itemsSignature();
         this._relayout();
         this._evaluateVisibility();
@@ -1014,6 +1087,8 @@ export class MaclikeDock {
             running: runningIds.sort(),
             folders: this._settings.get_strv('folder-paths'),
             folderIconStyle: this._settings.get_string('folder-icon-style'),
+            showAppsIcon: this._settings.get_boolean('show-apps-icon'),
+            showTrash: this._settings.get_boolean('show-trash'),
         });
     }
 
@@ -1544,6 +1619,7 @@ export class MaclikeDock {
             }
         }
         this._detachNativeBlur();
+        this._detachLiquidBlur();
         for (const [object, id] of this._signals) {
             try {
                 object.disconnect(id);

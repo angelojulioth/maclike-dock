@@ -35,7 +35,7 @@ class FanRow extends St.Button {
             reactive: true,
             can_focus: true,
             track_hover: true,
-            pivot_point: new Graphene.Point({x: 0.82, y: 0.5}),
+            pivot_point: new Graphene.Point({x: 0.88, y: 0.5}),
         });
 
         const box = new St.BoxLayout({
@@ -47,6 +47,9 @@ class FanRow extends St.Button {
             text: isFolderAction ? _('Open in Files') : info.get_display_name(),
             y_align: Clutter.ActorAlign.CENTER,
         });
+        label.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+        label.clutter_text.line_wrap = false;
+        label.clutter_text.single_line_mode = true;
         const icon = new St.Icon({
             style_class: isFolderAction
                 ? 'maclike-stack-open-icon'
@@ -232,16 +235,18 @@ export class StackPopup {
         const [anchorWidth] = this._anchorActor.get_transformed_size();
         const anchorCenter = anchorX + anchorWidth / 2;
         const screenWidth = global.stage.width;
-        const fanToLeft = anchorCenter > screenWidth / 2;
+        const actions = this._actions(entries);
+        const totalItems = actions.length;
 
-        this._actions(entries).forEach((entry, index) => {
+        actions.forEach((entry, index) => {
             const row = new FanRow(entry);
             this._overlay.add_child(row);
             this._animatedActors.push(row);
 
             const [, naturalWidth] = row.get_preferred_width(-1);
             const distance = index + 1;
-            const curve = Math.min(90, 9 * Math.pow(distance, 1.36));
+            // Enhanced progressive arc curve
+            const curve = Math.min(150, 11 * Math.pow(distance, 1.38));
             const iconCenterOffset = naturalWidth - 27;
             let x = anchorCenter - iconCenterOffset;
             x += fanToLeft ? -curve : curve;
@@ -250,15 +255,21 @@ export class StackPopup {
             row.set_position(Math.round(x), Math.round(y));
             row.set_size(naturalWidth, 57);
 
+            // Subtle progressive rotation along the fan arc
+            const rotFactor = Math.pow(distance / Math.max(1, totalItems), 1.25);
+            const targetRotation = (fanToLeft ? -1 : 1) * (rotFactor * 13.5);
+
             row.opacity = 0;
             row.scale_x = 0.55;
             row.scale_y = 0.55;
+            row.rotation_angle_z = 0;
             row.translation_x = Math.round(anchorCenter - (x + iconCenterOffset));
             row.translation_y = Math.round(anchorY - y);
             row.ease({
                 opacity: 255,
                 scale_x: 1,
                 scale_y: 1,
+                rotation_angle_z: targetRotation,
                 translation_x: 0,
                 translation_y: 0,
                 delay: index * 22,
@@ -491,6 +502,7 @@ export class StackPopup {
                 opacity: 0,
                 scale_x: 0.78,
                 scale_y: 0.78,
+                rotation_angle_z: 0,
                 duration: 135,
                 delay: Math.min(index, 4) * 10,
                 mode: Clutter.AnimationMode.EASE_IN_QUAD,

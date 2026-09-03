@@ -62,6 +62,12 @@ export default class MaclikeDockPreferences extends ExtensionPreferences {
         addSwitch(appearance, settings, 'show-running-apps',
             _('Show running applications'),
             _('Add open applications that are not favorites yet.'));
+        addSwitch(appearance, settings, 'show-apps-icon',
+            _('Show Applications icon'),
+            _('Show GNOME Applications grid / Launchpad button in the Dock.'));
+        addSwitch(appearance, settings, 'show-trash',
+            _('Show Trash Bin'),
+            _('Show Trash Bin icon with live status and context menu.'));
         addSwitch(appearance, settings, 'border-enabled',
             _('Container border'),
             _('Draw a subtle frame around the Dock, matched to the blur radius.'));
@@ -118,29 +124,54 @@ export default class MaclikeDockPreferences extends ExtensionPreferences {
             80, 500, 10);
 
         const integration = new Adw.PreferencesGroup({
-            title: _('Blur'),
-            description: _('The native engine captures the area behind the Dock and requires no other extension.'),
+            title: _('Blur & Glass Effect'),
+            description: _('The native and liquid glass engines capture the area behind the Dock and require no external extension.'),
         });
         page.add(integration);
         const blurModel = Gtk.StringList.new([
+            _('Liquid Glass (Apple style)'),
             _('Maclike Dock native'),
             'Blur My Shell',
             _('No blur'),
         ]);
-        const blurValues = ['native', 'bms', 'off'];
+        const blurValues = ['liquid', 'native', 'bms', 'off'];
         const blurRow = new Adw.ComboRow({
             title: _('Blur engine'),
-            subtitle: _('Blur My Shell uses its Dash to Dock surface; the native mode is self-contained.'),
+            subtitle: _('Choose between Apple Liquid Glass, built-in native blur, Blur My Shell or disabled.'),
             model: blurModel,
             selected: Math.max(0, blurValues.indexOf(settings.get_string('blur-engine'))),
         });
-        blurRow.connect('notify::selected', () => settings.set_string(
-            'blur-engine', blurValues[blurRow.selected] ?? 'native'));
+        blurRow.connect('notify::selected', () => {
+            const val = blurValues[blurRow.selected] ?? 'native';
+            settings.set_string('blur-engine', val);
+            updateLiquidVisibility();
+        });
         settings.connect('changed::blur-engine', () => {
             blurRow.selected = Math.max(0,
                 blurValues.indexOf(settings.get_string('blur-engine')));
+            updateLiquidVisibility();
         });
         integration.add(blurRow);
+
+        const liquidGroup = new Adw.PreferencesGroup({
+            title: _('Liquid Glass Optics'),
+            description: _('Fine-tune the physical refraction and lighting of Apple Liquid Glass.'),
+        });
+        page.add(liquidGroup);
+        addSpin(liquidGroup, settings, 'liquid-refraction',
+            _('Refraction Strength'), _('Optical bending distortion of the background.'),
+            0.0, 1.0, 0.05, 2);
+        addSpin(liquidGroup, settings, 'liquid-dispersion',
+            _('Chromatic Dispersion'), _('Prismatic color fringing along the curved edge.'),
+            0.0, 0.10, 0.005, 3);
+        addSpin(liquidGroup, settings, 'liquid-specular',
+            _('Specular & Crest'), _('Intensity of the top razor glint and surface highlights.'),
+            0.0, 1.5, 0.05, 2);
+
+        const updateLiquidVisibility = () => {
+            liquidGroup.visible = settings.get_string('blur-engine') === 'liquid';
+        };
+        updateLiquidVisibility();
         const tintModel = Gtk.StringList.new([
             _('Automatic (follow GNOME)'),
             _('Light'),

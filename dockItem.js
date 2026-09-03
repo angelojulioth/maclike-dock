@@ -636,3 +636,148 @@ class FolderDockItem extends DockItem {
         super.cleanup();
     }
 });
+
+export const ShowAppsDockItem = GObject.registerClass(
+class ShowAppsDockItem extends DockItem {
+    _init({iconSize, renderSize, slotSize, onActivated = null}) {
+        const icon = new St.Icon({
+            icon_name: 'view-app-grid-symbolic',
+            icon_size: renderSize,
+        });
+        super._init({
+            label: _('Applications'),
+            icon,
+            iconSize,
+            renderSize,
+            slotSize,
+            activate: () => this._toggleOverview(),
+            onActivated,
+        });
+    }
+
+    _toggleOverview() {
+        if (Main.overview.visible) {
+            Main.overview.hide();
+        } else {
+            Main.overview.showApps();
+        }
+    }
+});
+
+export const TrashDockItem = GObject.registerClass(
+class TrashDockItem extends DockItem {
+    _init({iconSize, renderSize, slotSize, menuChanged = null, onActivated = null}) {
+        const trashUri = 'trash:///';
+        const trashFile = Gio.File.new_for_uri(trashUri);
+        const icon = new St.Icon({
+            icon_name: 'user-trash-symbolic',
+            icon_size: renderSize,
+        });
+        super._init({
+            label: _('Trash'),
+            icon,
+            iconSize,
+            renderSize,
+            slotSize,
+            activate: () => this._openTrash(),
+            menuChanged,
+            onActivated,
+        });
+
+        this._trashFile = trashFile;
+        this._updateTrashState();
+        try {
+            this._monitor = this._trashFile.monitor_directory(
+                Gio.FileMonitorFlags.NONE, null);
+            this._monitorId = this._monitor.connect('changed', () => this._updateTrashState());
+        } catch {
+            // Virtual trash directory monitoring may not be supported on all systems
+        }
+
+        this._menu = null;
+        this._menuManager = new PopupMenu.PopupMenuManager(this);
+        this.connect('popup-menu', () => this.popupMenu());
+
+        const rightClick = new Clutter.ClickGesture({
+            required_button: Clutter.BUTTON_SECONDARY,
+            recognize_on_press: true,
+        });
+        rightClick.connect('recognize', () => this.popupMenu());
+        this.add_action(rightClick);
+
+        const longPress = new Clutter.LongPressGesture();
+        longPress.connect('recognize', () => this.popupMenu());
+        this.add_action(longPress);
+    }
+
+    _updateTrashState() {
+        try {
+            const info = this._trashFile.query_info(
+                'trash::item-count,standard::icon',
+                Gio.FileQueryInfoFlags.NONE, null);
+            const count = info.get_attribute_uint32('trash::item-count');
+            const gicon = info.get_icon();
+            if (gicon) {
+                this._iconActor.gicon = gicon;
+            } else {
+                this._iconActor.icon_name = count > 0
+                    ? 'user-trash-full-symbolic'
+                    : 'user-trash-symbolic';
+            }
+        } catch {
+            this._iconActor.icon_name = 'user-trash-symbolic';
+        }
+    }
+
+    _openTrash() {
+        try {
+            Gio.AppInfo.launch_default_for_uri(
+                'trash:///',
+                global.create_app_launch_context(0, -1));
+        } catch {
+            GLib.spawn_command_line_async('gio open trash:///');
+        }
+    }
+
+    _emptyTrash() {
+        try {
+            GLib.spawn_command_line_async('gio trash --empty');
+            GLib.timeout_add_once(GLib.PRIORITY_DEFAULT, 350, () => this._updateTrashState());
+        } catch {
+            // Ignore error
+        }
+    }
+
+    popupMenu() {
+        if (!this._menu) {
+            this._menu = new PopupMenu.PopupMenu(this, 0.5, St.Side.BOTTOM);
+            this._menu.addAction(_('Open'), () => this._openTrash());
+            this._menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+            const emptyItem = this._menu.addAction(_('Empty Trash'), () => this._emptyTrash());
+            emptyItem.add_style_class_name('maclike-force-quit-item');
+
+            this._menu.connect('open-state-changed', (_menu, open) => {
+                this.setMenuOpen(open);
+            });
+            Main.uiGroup.add_child(this._menu.actor);
+            this._menuManager.addMenu(this._menu);
+        }
+        this.setMenuOpen(true);
+        this._menu.open();
+        return Clutter.EVENT_STOP;
+    }
+
+    cleanup() {
+        if (this._monitorId && this._monitor) {
+            this._monitor.disconnect(this._monitorId);
+            this._monitor.cancel();
+            this._monitor = null;
+            this._monitorId = 0;
+        }
+        this._menu?.destroy();
+        this._menu = null;
+        this._menuManager = null;
+        super.cleanup();
+    }
+});
+
