@@ -247,7 +247,7 @@ export class StackPopup {
             const [, naturalWidth] = row.get_preferred_width(-1);
             const distance = index + 1;
             // Enhanced progressive arc curve
-            const curve = Math.min(150, 11 * Math.pow(distance, 1.38));
+            const curve = Math.min(150, 14 * Math.pow(distance, 1.45));
             const iconCenterOffset = naturalWidth - 27;
             let x = anchorCenter - iconCenterOffset;
             x += fanToLeft ? -curve : curve;
