@@ -283,6 +283,7 @@ export class StackPopup {
             layout_manager: new Clutter.BinLayout(),
             pivot_point: new Graphene.Point({x: 0.5, y: 1}),
         });
+        this._panel = panel;
         const blurSurface = new St.Widget({
             name: 'maclike-stack-grid-blur-surface',
             style_class: 'maclike-stack-grid-blur-surface',
@@ -515,8 +516,77 @@ export class StackPopup {
         this._overlay?.destroy();
         this._overlay = null;
         this._backdrop = null;
+        this._panel = null;
         this._animatedActors = [];
         this._closing = false;
         onDestroy?.();
+    }
+
+    isPointerInside(x, y) {
+        if (!this._overlay || this._closing)
+            return false;
+
+        const margin = 16;
+        let anchorX = 0, anchorY = 0, anchorWidth = 0, anchorHeight = 0;
+        try {
+            [anchorX, anchorY] = this._anchorActor.get_transformed_position();
+            [anchorWidth, anchorHeight] = this._anchorActor.get_transformed_size();
+        } catch (_) {}
+
+        // 1. Grid Mode check
+        if (this._panel && this._panel.visible) {
+            try {
+                const [px, py] = this._panel.get_transformed_position();
+                const [pw, ph] = this._panel.get_transformed_size();
+
+                // Inside the panel itself
+                if (x >= px - margin && x <= px + pw + margin &&
+                    y >= py - margin && y <= py + ph + margin)
+                    return true;
+
+                // Inside the transit corridor connecting dock anchor item to the panel
+                if (anchorWidth > 0 && anchorHeight > 0) {
+                    const corrLeft = Math.min(px, anchorX) - margin;
+                    const corrRight = Math.max(px + pw, anchorX + anchorWidth) + margin;
+                    const corrTop = Math.min(py + ph, anchorY) - margin;
+                    const corrBottom = Math.max(py + ph, anchorY + anchorHeight) + margin;
+                    if (x >= corrLeft && x <= corrRight && y >= corrTop && y <= corrBottom)
+                        return true;
+                }
+            } catch (_) {}
+            return false;
+        }
+
+        // 2. Fan Mode check
+        if (this._animatedActors.length > 0) {
+            for (const actor of this._animatedActors) {
+                if (!actor.visible)
+                    continue;
+                try {
+                    const [ax, ay] = actor.get_transformed_position();
+                    const [aw, ah] = actor.get_transformed_size();
+                    if (x >= ax - margin && x <= ax + aw + margin &&
+                        y >= ay - margin && y <= ay + ah + margin)
+                        return true;
+                } catch (_) {}
+            }
+
+            // Transit corridor between the bottom-most fan row and the anchor actor
+            try {
+                const lowestRow = this._animatedActors[0];
+                if (lowestRow && lowestRow.visible && anchorWidth > 0 && anchorHeight > 0) {
+                    const [lx, ly] = lowestRow.get_transformed_position();
+                    const [lw, lh] = lowestRow.get_transformed_size();
+                    const corrLeft = Math.min(lx, anchorX) - margin;
+                    const corrRight = Math.max(lx + lw, anchorX + anchorWidth) + margin;
+                    const corrTop = Math.min(ly + lh, anchorY) - margin;
+                    const corrBottom = Math.max(ly + lh, anchorY + anchorHeight) + margin;
+                    if (x >= corrLeft && x <= corrRight && y >= corrTop && y <= corrBottom)
+                        return true;
+                }
+            } catch (_) {}
+        }
+
+        return false;
     }
 }

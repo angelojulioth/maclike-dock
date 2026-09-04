@@ -13,7 +13,6 @@ import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js'
 import {AppDockItem, FolderDockItem, ShowAppsDockItem, TrashDockItem} from './dockItem.js';
 import {StackPopup} from './stackFan.js';
 import {NativeBlurSurface} from './nativeBlur.js';
-import {LiquidGlassSurface} from './liquidGlassEngine.js';
 
 const INTERACTION_GRACE = 800;
 const LAUNCH_PIN_MS = 4000;
@@ -644,7 +643,7 @@ export class MaclikeDock {
         this._nativeBlurSurface = null;
     }
 
-    _attachLiquidBlur() {
+    async _attachLiquidBlur() {
         if (!this._nativeBlurLayer)
             return;
         const radius = this._getBmsDockRadius();
@@ -657,16 +656,23 @@ export class MaclikeDock {
             specular: this._settings.get_double('liquid-specular'),
             darkTheme: this._darkTheme,
         };
-        if (!this._liquidBlurSurface) {
-            this._liquidBlurSurface = new LiquidGlassSurface(params);
-            this._nativeBlurLayer.add_child(this._liquidBlurSurface);
-            this._liquidBlurSurface.initialize();
-        } else {
-            this._liquidBlurSurface.update(params);
+        try {
+            const {LiquidGlassSurface} = await import(`./liquidGlassEngine.js?t=${Date.now()}`);
+            if (!this._nativeBlurLayer || !this._outer)
+                return;
+            if (!this._liquidBlurSurface) {
+                this._liquidBlurSurface = new LiquidGlassSurface(params);
+                this._nativeBlurLayer.add_child(this._liquidBlurSurface);
+                this._liquidBlurSurface.initialize();
+            } else {
+                this._liquidBlurSurface.update(params);
+            }
+            this._dockBlurStatus = 'attached-liquid-glass-surface';
+            this._applyDockBackgroundStyle(radius);
+            this._border?.set_style(`border-radius: ${radius}px;`);
+        } catch (error) {
+            this._logger?.error(`[MaclikeDock] Failed to attach liquid blur: ${error}`);
         }
-        this._dockBlurStatus = 'attached-liquid-glass-surface';
-        this._applyDockBackgroundStyle(radius);
-        this._border?.set_style(`border-radius: ${radius}px;`);
     }
 
     _detachLiquidBlur() {
@@ -1198,6 +1204,10 @@ export class MaclikeDock {
             openIcon,
             logger: this._logger,
             onDestroy: () => {
+                if (this._stackCloseTimeoutId) {
+                    GLib.source_remove(this._stackCloseTimeoutId);
+                    this._stackCloseTimeoutId = 0;
+                }
                 this._stack = null;
                 this._evaluateVisibility();
             },
@@ -1225,6 +1235,42 @@ export class MaclikeDock {
 
         this._pointerX = x;
         this._pointerY = y;
+
+        if (this._stack) {
+            const insideDock = inside;
+            const insideStack = this._stack.isPointerInside(x, y);
+            if (insideDock || insideStack) {
+                if (this._stackCloseTimeoutId) {
+                    GLib.source_remove(this._stackCloseTimeoutId);
+                    this._stackCloseTimeoutId = 0;
+                }
+            } else if (!this._stackCloseTimeoutId) {
+                this._stackCloseTimeoutId = GLib.timeout_add(
+                    GLib.PRIORITY_DEFAULT,
+                    250,
+                    () => {
+                        this._stackCloseTimeoutId = 0;
+                        if (this._stack) {
+                            let [curX, curY] = [this._pointerX, this._pointerY];
+                            try {
+                                [curX, curY] = global.get_pointer();
+                            } catch (_) {}
+                            const recheckDock = this._isInsideDock(curX, curY);
+                            const recheckStack = this._stack ? this._stack.isPointerInside(curX, curY) : false;
+                            if (!recheckDock && !recheckStack) {
+                                this._stack.close();
+                            }
+                        }
+                        return GLib.SOURCE_REMOVE;
+                    }
+                );
+                GLib.Source.set_name_by_id(
+                    this._stackCloseTimeoutId,
+                    '[maclike-dock] stack on-leave auto-close'
+                );
+            }
+        }
+
         if (inside !== this._pointerInside) {
             if (!inside) {
                 const endedEdgeSession = this._edgeRevealEnteredDock;
@@ -1247,6 +1293,27 @@ export class MaclikeDock {
     _handleStageLeave(pointerX, pointerY) {
         this._pointerX = pointerX;
         this._pointerY = pointerY;
+
+        if (this._stack) {
+            const insideDock = this._isInsideDock(pointerX, pointerY);
+            const insideStack = this._stack.isPointerInside(pointerX, pointerY);
+            if (!insideDock && !insideStack && !this._stackCloseTimeoutId) {
+                this._stackCloseTimeoutId = GLib.timeout_add(
+                    GLib.PRIORITY_DEFAULT,
+                    250,
+                    () => {
+                        this._stackCloseTimeoutId = 0;
+                        this._stack?.close();
+                        return GLib.SOURCE_REMOVE;
+                    }
+                );
+                GLib.Source.set_name_by_id(
+                    this._stackCloseTimeoutId,
+                    '[maclike-dock] stack stage-leave auto-close'
+                );
+            }
+        }
+
         if (this._launchPinned && this._isInsideDock(pointerX, pointerY)) {
             // Mapping a new client briefly transfers pointer focus away from
             // Shell even though the pointer is still over the Dock. Retaining
@@ -1586,6 +1653,10 @@ export class MaclikeDock {
     }
 
     destroy() {
+        if (this._stackCloseTimeoutId) {
+            GLib.source_remove(this._stackCloseTimeoutId);
+            this._stackCloseTimeoutId = 0;
+        }
         this._stack?.destroy();
         this._stack = null;
         this._timeline?.stop();

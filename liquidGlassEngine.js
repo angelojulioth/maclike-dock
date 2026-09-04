@@ -236,39 +236,69 @@ export const LiquidGlassEffect = GObject.registerClass({
                 cogl_color_out = vec4(litColor * alpha, alpha);
             }
         `);
+
+        this.set_uniform_value('corner_radius', parseFloat(this._radius));
+        this.set_uniform_value('scale', parseFloat(this._scale));
+        this.set_uniform_value('refraction_strength', parseFloat(this._refraction));
+        this.set_uniform_value('dispersion', parseFloat(this._dispersion));
+        this.set_uniform_value('specular_intensity', parseFloat(this._specular));
+        this.set_uniform_value('is_dark', this._darkTheme ? 1.0 : 0.0);
+        this.set_uniform_value('width', 100.0);
+        this.set_uniform_value('height', 50.0);
     }
 
-    vfunc_paint_target(paintContext) {
-        const actor = this.get_actor();
-        if (actor) {
-            const alloc = actor.get_allocation_box();
-            const w = (alloc && alloc.x2 > alloc.x1) ? (alloc.x2 - alloc.x1) : actor.width;
-            const h = (alloc && alloc.y2 > alloc.y1) ? (alloc.y2 - alloc.y1) : actor.height;
-            this.set_uniform_value('width', Math.max(1.0, parseFloat(w)));
-            this.set_uniform_value('height', Math.max(1.0, parseFloat(h)));
-            this.set_uniform_value('corner_radius', parseFloat(this._radius));
-            this.set_uniform_value('scale', parseFloat(this._scale));
-            this.set_uniform_value('refraction_strength', parseFloat(this._refraction));
-            this.set_uniform_value('dispersion', parseFloat(this._dispersion));
-            this.set_uniform_value('specular_intensity', parseFloat(this._specular));
-            this.set_uniform_value('is_dark', this._darkTheme ? 1.0 : 0.0);
-        }
-        super.vfunc_paint_target(paintContext);
+    vfunc_paint_target(...args) {
+        try {
+            const actor = this.get_actor();
+            if (actor) {
+                const alloc = actor.get_allocation_box();
+                const w = (alloc && alloc.x2 > alloc.x1) ? (alloc.x2 - alloc.x1) : actor.width;
+                const h = (alloc && alloc.y2 > alloc.y1) ? (alloc.y2 - alloc.y1) : actor.height;
+                if (w > 0 && h > 0) {
+                    this.set_uniform_value('width', Math.max(1.0, parseFloat(w)));
+                    this.set_uniform_value('height', Math.max(1.0, parseFloat(h)));
+                    this.set_uniform_value('corner_radius', parseFloat(this._radius));
+                    this.set_uniform_value('scale', parseFloat(this._scale));
+                    this.set_uniform_value('refraction_strength', parseFloat(this._refraction));
+                    this.set_uniform_value('dispersion', parseFloat(this._dispersion));
+                    this.set_uniform_value('specular_intensity', parseFloat(this._specular));
+                    this.set_uniform_value('is_dark', this._darkTheme ? 1.0 : 0.0);
+                }
+            }
+        } catch (_) {}
+        return super.vfunc_paint_target(...args);
     }
 
     vfunc_set_actor(actor) {
-        if (this._signals?.length && this.get_actor()) {
-            for (const id of this._signals)
-                this.get_actor().disconnect(id);
+        if (this._connectedActor && this._signals?.length) {
+            for (const id of this._signals) {
+                try {
+                    this._connectedActor.disconnect(id);
+                } catch (_) {}
+            }
         }
         this._signals = [];
+        this._connectedActor = actor;
         if (actor) {
             const sync = () => {
+                const alloc = actor.get_allocation_box();
+                const w = (alloc && alloc.x2 > alloc.x1) ? (alloc.x2 - alloc.x1) : actor.width;
+                const h = (alloc && alloc.y2 > alloc.y1) ? (alloc.y2 - alloc.y1) : actor.height;
+                if (w > 0 && h > 0) {
+                    this.set_uniform_value('width', Math.max(1.0, parseFloat(w)));
+                    this.set_uniform_value('height', Math.max(1.0, parseFloat(h)));
+                    this.set_uniform_value('corner_radius', parseFloat(this._radius));
+                    this.set_uniform_value('scale', parseFloat(this._scale));
+                    this.set_uniform_value('refraction_strength', parseFloat(this._refraction));
+                    this.set_uniform_value('dispersion', parseFloat(this._dispersion));
+                    this.set_uniform_value('specular_intensity', parseFloat(this._specular));
+                    this.set_uniform_value('is_dark', this._darkTheme ? 1.0 : 0.0);
+                }
                 this.queue_repaint();
             };
             this._signals.push(actor.connect('notify::size', sync));
             this._signals.push(actor.connect('notify::allocation', sync));
-            this.queue_repaint();
+            sync();
         }
         super.vfunc_set_actor(actor);
     }
