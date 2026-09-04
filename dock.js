@@ -657,7 +657,7 @@ export class MaclikeDock {
             darkTheme: this._darkTheme,
         };
         try {
-            const {LiquidGlassSurface} = await import(`./liquidGlassEngine.js?t=${Date.now()}`);
+            const {LiquidGlassSurface} = await import(`./liquidGlass.js?t=${Date.now()}`);
             if (!this._nativeBlurLayer || !this._outer)
                 return;
             if (!this._liquidBlurSurface) {
