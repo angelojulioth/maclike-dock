@@ -1507,6 +1507,7 @@ export class MaclikeDock {
         this._hidden = hidden;
         if (hidden) {
             this._releaseMagnification();
+            this._stack?.close();
         } else {
             this._noteInteraction();
         }
