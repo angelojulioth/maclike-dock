@@ -339,5 +339,41 @@ export default class MaclikeDockPreferences extends ExtensionPreferences {
             });
             chooser.show();
         });
+
+        const supportGroup = new Adw.PreferencesGroup({
+            title: _('Support'),
+            description: _('If you find Maclike Dock useful, consider supporting its development.'),
+        });
+        page.add(supportGroup);
+
+        const liberapayRow = new Adw.ActionRow({
+            title: _('Donate via Liberapay'),
+            subtitle: 'liberapay.com/angelojulioth/donate',
+            activatable: true,
+        });
+        const liberapayIcon = new Gtk.Image({
+            icon_name: 'external-link-symbolic',
+            valign: Gtk.Align.CENTER,
+        });
+        liberapayRow.add_suffix(liberapayIcon);
+        liberapayRow.connect('activated', () => {
+            Gio.AppInfo.launch_default_for_uri('https://liberapay.com/angelojulioth/donate', null);
+        });
+        supportGroup.add(liberapayRow);
+
+        const paypalRow = new Adw.ActionRow({
+            title: _('Donate via PayPal'),
+            subtitle: 'paypal.me/angelojulioth',
+            activatable: true,
+        });
+        const paypalIcon = new Gtk.Image({
+            icon_name: 'external-link-symbolic',
+            valign: Gtk.Align.CENTER,
+        });
+        paypalRow.add_suffix(paypalIcon);
+        paypalRow.connect('activated', () => {
+            Gio.AppInfo.launch_default_for_uri('https://paypal.me/angelojulioth', null);
+        });
+        supportGroup.add(paypalRow);
     }
 }
